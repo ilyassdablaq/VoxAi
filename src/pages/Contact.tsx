@@ -55,7 +55,7 @@ const Contact = () => {
                   </div>
                   <div>
                     <h4 className="font-heading font-semibold text-foreground">Email Us</h4>
-                    <p className="text-sm text-muted-foreground">hello@voxai.com</p>
+                    <p className="text-sm text-muted-foreground">ilyassdablaq@outlook.com</p>
                   </div>
                 </div>
                 <div className="glass rounded-xl p-5 flex items-start gap-4">

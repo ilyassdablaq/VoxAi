@@ -1,42 +1,23 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
+/* Custom application styles */
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
+@layer components {
+  .section-padding {
+    @apply px-4 sm:px-6 lg:px-8;
   }
-  to {
-    transform: rotate(360deg);
+
+  .glass {
+    @apply bg-card/50 backdrop-blur-sm border border-border/40;
   }
-}
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
+  .glow-primary {
+    @apply shadow-[0_0_20px_rgba(187,_216,_255,_0.3)] hover:shadow-[0_0_30px_rgba(187,_216,_255,_0.5)];
   }
-}
 
-.card {
-  padding: 2em;
-}
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent;
+  }
 
-.read-the-docs {
-  color: #888;
+  .font-heading {
+    @apply font-['Space_Grotesk'];
+  }
 }
