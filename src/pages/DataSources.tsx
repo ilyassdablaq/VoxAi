@@ -1,10 +1,11 @@
-import { ChangeEvent, DragEvent, useMemo, useState } from "react";
+import { ChangeEvent, DragEvent, useRef, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileUp, Globe, Loader2, Trash2 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { knowledgeService } from "@/services/knowledge.service";
@@ -14,12 +15,15 @@ const ACCEPTED_FILE_TYPES = ".pdf,.txt,.json,.xml";
 export default function DataSources() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isDragActive, setIsDragActive] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [structuredTitle, setStructuredTitle] = useState("Product Catalog");
   const [structuredFormat, setStructuredFormat] = useState<"json" | "xml">("json");
   const [structuredContent, setStructuredContent] = useState("{}");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [processingStatus, setProcessingStatus] = useState("Idle");
 
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ["knowledge-documents"],
@@ -27,15 +31,27 @@ export default function DataSources() {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => knowledgeService.uploadFile(file),
+    mutationFn: async (file: File) => {
+      setUploadProgress(0);
+      setProcessingStatus("Uploading file...");
+      return knowledgeService.uploadFile(file, (progress) => {
+        setUploadProgress(progress);
+        if (progress >= 100) {
+          setProcessingStatus("Extracting text and creating embeddings...");
+        }
+      });
+    },
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      setUploadProgress(100);
+      setProcessingStatus("Ingestion completed");
       toast({
         title: "Training complete",
         description: `${result.document.title} indexed with ${result.chunksCount} chunks.`,
       });
     },
     onError: (error) => {
+      setProcessingStatus("Upload failed");
       toast({
         title: "Upload failed",
         description: error instanceof Error ? error.message : "Unable to upload file",
@@ -45,15 +61,20 @@ export default function DataSources() {
   });
 
   const structuredMutation = useMutation({
-    mutationFn: () => knowledgeService.ingestStructured(structuredFormat, structuredTitle, structuredContent),
+    mutationFn: () => {
+      setProcessingStatus("Parsing structured data and embedding...");
+      return knowledgeService.ingestStructured(structuredFormat, structuredTitle, structuredContent);
+    },
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      setProcessingStatus("Structured ingestion completed");
       toast({
         title: "Structured data indexed",
         description: `${result.document.title} is ready for chatbot retrieval.`,
       });
     },
     onError: (error) => {
+      setProcessingStatus("Structured ingestion failed");
       toast({
         title: "Structured import failed",
         description: error instanceof Error ? error.message : "Unable to process structured content",
@@ -63,9 +84,13 @@ export default function DataSources() {
   });
 
   const crawlMutation = useMutation({
-    mutationFn: () => knowledgeService.ingestUrl(websiteUrl, 4),
+    mutationFn: () => {
+      setProcessingStatus("Crawling website pages and embedding content...");
+      return knowledgeService.ingestUrl(websiteUrl, 4);
+    },
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ["knowledge-documents"] });
+      setProcessingStatus("Website ingestion completed");
       toast({
         title: "Website trained",
         description: `${result.document.title} indexed from your website pages.`,
@@ -73,6 +98,7 @@ export default function DataSources() {
       setWebsiteUrl("");
     },
     onError: (error) => {
+      setProcessingStatus("Website crawl failed");
       toast({
         title: "Website crawl failed",
         description: error instanceof Error ? error.message : "Could not crawl this URL",
@@ -99,11 +125,11 @@ export default function DataSources() {
   const isBusy = uploadMutation.isPending || structuredMutation.isPending || crawlMutation.isPending;
 
   const helperText = useMemo(() => {
-    if (uploadMutation.isPending) return "Uploading and chunking file...";
-    if (structuredMutation.isPending) return "Parsing structured data and indexing...";
-    if (crawlMutation.isPending) return "Crawling website and extracting content...";
+    if (uploadMutation.isPending) return `${processingStatus} (${uploadProgress}%)`;
+    if (structuredMutation.isPending || crawlMutation.isPending) return processingStatus;
+    if (processingStatus !== "Idle") return processingStatus;
     return "Upload files, paste JSON/XML, or crawl a website URL to train your chatbot.";
-  }, [crawlMutation.isPending, structuredMutation.isPending, uploadMutation.isPending]);
+  }, [crawlMutation.isPending, processingStatus, structuredMutation.isPending, uploadMutation.isPending, uploadProgress]);
 
   const handleFileInput = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -111,7 +137,14 @@ export default function DataSources() {
       return;
     }
     uploadMutation.mutate(file);
-    event.target.value = "";
+    // Reset input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleChooseFile = () => {
+    fileInputRef.current?.click();
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -145,20 +178,31 @@ export default function DataSources() {
             >
               <FileUp className="w-8 h-8 mx-auto text-primary mb-3" />
               <p className="text-sm text-muted-foreground">Drag and drop PDF, TXT, JSON, or XML files here.</p>
-              <label className="mt-3 inline-block">
-                <Input
-                  className="hidden"
-                  type="file"
-                  accept={ACCEPTED_FILE_TYPES}
-                  onChange={handleFileInput}
-                  disabled={isBusy}
-                />
-                <Button type="button" variant="outline" disabled={isBusy}>
-                  Choose file
-                </Button>
-              </label>
+              <input
+                ref={fileInputRef}
+                className="hidden"
+                type="file"
+                accept={ACCEPTED_FILE_TYPES}
+                onChange={handleFileInput}
+                disabled={isBusy}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isBusy}
+                onClick={handleChooseFile}
+                className="mt-3"
+              >
+                Choose file
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground">Supported formats: PDF, text files, JSON, XML.</p>
+            {uploadMutation.isPending ? (
+              <div className="space-y-2">
+                <Progress value={uploadProgress} />
+                <p className="text-xs text-muted-foreground">{processingStatus}</p>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

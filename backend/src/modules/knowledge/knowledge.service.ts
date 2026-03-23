@@ -17,6 +17,19 @@ export class KnowledgeService {
     });
   }
 
+  async ingestFileMultipart(
+    userId: string,
+    payload: { fileName: string; originalFileName: string; mimeType: string; buffer: Buffer },
+  ) {
+    return this.ragService.ingestFromBuffer({
+      userId,
+      fileName: payload.fileName,
+      originalFileName: payload.originalFileName,
+      mimeType: payload.mimeType,
+      buffer: payload.buffer,
+    });
+  }
+
   async ingestStructured(userId: string, payload: IngestStructuredInput) {
     return this.ragService.ingestStructuredData({
       userId,
