@@ -254,8 +254,9 @@ export class RagService {
       try {
         response = await fetch(currentUrl, {
           headers: {
-            "User-Agent": "voxflow-bot/1.0",
-            Accept: "text/html,application/xhtml+xml",
+            "User-Agent": "Mozilla/5.0 (compatible; voxflow-bot/1.0; +https://voxflow.io/bot)",
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
           },
           redirect: "follow",
           signal: controller.signal,
@@ -268,31 +269,32 @@ export class RagService {
 
         const contentType = response.headers.get("content-type") || "";
         if (!contentType.includes("text/html")) {
-          crawlErrors.push({ url: currentUrl, reason: `Unsupported content-type ${contentType}` });
+          crawlErrors.push({ url: currentUrl, reason: `Unsupported content-type: ${contentType}` });
           continue;
         }
 
         const html = await response.text();
+        if (!html || html.length === 0) {
+          crawlErrors.push({ url: currentUrl, reason: "Empty response body" });
+          continue;
+        }
+
         const $ = cheerio.load(html);
-        $("script, style, noscript").remove();
+        
+        // Remove script, style, and non-content elements
+        $("script, style, noscript, meta, link, svg, iframe, image, picture").remove();
 
-        const pageText = normalizeWhitespace(
-          [
-            $("h1, h2, h3").text(),
-            $("main").text(),
-            $("article").text(),
-            $("p").text(),
-            $("li").text(),
-          ]
-            .filter(Boolean)
-            .join(" "),
-        );
+        // Extract all visible text content more comprehensively
+        const pageText = normalizeWhitespace($("body").text());
 
-        if (pageText) {
+        if (pageText && pageText.length > 20) {
           collectedPages.push({
             url: currentUrl,
             text: pageText,
           });
+          logger.debug({ url: currentUrl, textLength: pageText.length }, "RAG crawl page extracted");
+        } else {
+          crawlErrors.push({ url: currentUrl, reason: "No extractable text content" });
         }
 
         const links = $("a[href]")
@@ -309,7 +311,7 @@ export class RagService {
           .filter((nextUrl) => {
             try {
               const parsed = new URL(nextUrl);
-              return parsed.origin === rootUrl.origin;
+              return parsed.origin === rootUrl.origin && !parsed.hash;
             } catch {
               return false;
             }
@@ -323,6 +325,7 @@ export class RagService {
       } catch (error) {
         const reason = error instanceof Error ? error.message : "Unknown fetch error";
         crawlErrors.push({ url: currentUrl, reason });
+        logger.debug({ url: currentUrl, reason }, "RAG crawl page fetch failed");
         continue;
       } finally {
         clearTimeout(timeout);

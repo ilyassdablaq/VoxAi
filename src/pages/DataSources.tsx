@@ -1,4 +1,4 @@
-import { ChangeEvent, DragEvent, useMemo, useState } from "react";
+import { ChangeEvent, DragEvent, useRef, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileUp, Globe, Loader2, Trash2 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
@@ -15,6 +15,7 @@ const ACCEPTED_FILE_TYPES = ".pdf,.txt,.json,.xml";
 export default function DataSources() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isDragActive, setIsDragActive] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState("");
@@ -136,7 +137,14 @@ export default function DataSources() {
       return;
     }
     uploadMutation.mutate(file);
-    event.target.value = "";
+    // Reset input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleChooseFile = () => {
+    fileInputRef.current?.click();
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -170,18 +178,23 @@ export default function DataSources() {
             >
               <FileUp className="w-8 h-8 mx-auto text-primary mb-3" />
               <p className="text-sm text-muted-foreground">Drag and drop PDF, TXT, JSON, or XML files here.</p>
-              <label className="mt-3 inline-block">
-                <Input
-                  className="hidden"
-                  type="file"
-                  accept={ACCEPTED_FILE_TYPES}
-                  onChange={handleFileInput}
-                  disabled={isBusy}
-                />
-                <Button type="button" variant="outline" disabled={isBusy}>
-                  Choose file
-                </Button>
-              </label>
+              <input
+                ref={fileInputRef}
+                className="hidden"
+                type="file"
+                accept={ACCEPTED_FILE_TYPES}
+                onChange={handleFileInput}
+                disabled={isBusy}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isBusy}
+                onClick={handleChooseFile}
+                className="mt-3"
+              >
+                Choose file
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground">Supported formats: PDF, text files, JSON, XML.</p>
             {uploadMutation.isPending ? (
