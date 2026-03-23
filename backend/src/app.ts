@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import sensible from "@fastify/sensible";
 import jwt from "@fastify/jwt";
 import websocket from "@fastify/websocket";
+import multipart from "@fastify/multipart";
 import { env } from "./config/env.js";
 import { registerSecurityPlugins } from "./common/plugins/security.js";
 import { errorHandler } from "./common/middleware/error-handler.js";
@@ -41,6 +42,12 @@ export async function buildApp() {
 
   await app.register(sensible);
   await app.register(websocket);
+  await app.register(multipart, {
+    limits: {
+      fileSize: 25 * 1024 * 1024,
+      files: 1,
+    },
+  });
 
   await app.register(jwt, {
     secret: env.JWT_ACCESS_SECRET,

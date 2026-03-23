@@ -5,11 +5,13 @@ import { XMLParser } from "fast-xml-parser";
 import * as cheerio from "cheerio";
 import { AppError } from "../../common/errors/app-error.js";
 import { env } from "../../config/env.js";
+import { logger } from "../../config/logger.js";
 import { prisma } from "../../infra/database/prisma.js";
 
 const EMBEDDING_DIMENSION = 1536;
 const CHUNK_WORDS = 400;
 const CHUNK_OVERLAP_WORDS = 70;
+const CRAWL_TIMEOUT_MS = 12000;
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -69,6 +71,7 @@ export class RagService {
   }
 
   async retrieveContext(userId: string, queryText: string, topK = 4): Promise<string[]> {
+    logger.debug({ userId, topK, queryLength: queryText.length }, "RAG retrieval started");
     const queryEmbedding = await this.embedText(queryText);
     const embeddingSql = toVectorSql(queryEmbedding);
 
@@ -84,7 +87,9 @@ export class RagService {
       topK,
     )) as Array<{ chunk_text: string }>;
 
-    return rows.map((row) => row.chunk_text);
+    const contexts = rows.map((row) => row.chunk_text);
+    logger.debug({ userId, retrievedChunks: contexts.length }, "RAG retrieval completed");
+    return contexts;
   }
 
   async listDocuments(userId: string) {
@@ -118,59 +123,121 @@ export class RagService {
   }
 
   async ingestFromUpload(input: { userId: string; fileName: string; mimeType: string; contentBase64: string }) {
+    logger.info({ userId: input.userId, fileName: input.fileName, mimeType: input.mimeType }, "RAG ingest file (base64) started");
     const buffer = Buffer.from(input.contentBase64, "base64");
+    if (!buffer.length) {
+      throw new AppError(400, "EMPTY_FILE", "Uploaded file is empty");
+    }
+    return this.ingestFromBuffer({
+      userId: input.userId,
+      fileName: input.fileName,
+      originalFileName: input.fileName,
+      mimeType: input.mimeType,
+      buffer,
+    });
+  }
+
+  async ingestFromBuffer(input: {
+    userId: string;
+    fileName: string;
+    originalFileName: string;
+    mimeType: string;
+    buffer: Buffer;
+  }) {
+    logger.info(
+      {
+        userId: input.userId,
+        fileName: input.fileName,
+        originalFileName: input.originalFileName,
+        mimeType: input.mimeType,
+        fileSize: input.buffer.length,
+      },
+      "RAG ingest file (multipart/buffer) started",
+    );
+
     const lowerName = input.fileName.toLowerCase();
 
     let extractedText = "";
     if (input.mimeType.includes("pdf") || lowerName.endsWith(".pdf")) {
-      const parsed = await (pdfParse as unknown as (dataBuffer: Buffer) => Promise<{ text: string }>)(buffer);
-      extractedText = parsed.text;
+      try {
+        const parsed = await (pdfParse as unknown as (dataBuffer: Buffer) => Promise<{ text: string }>)(input.buffer);
+        extractedText = parsed.text;
+      } catch (error) {
+        logger.warn({ error, fileName: input.fileName }, "RAG PDF parsing failed");
+        throw new AppError(400, "PDF_PARSE_FAILED", "Could not extract text from PDF file");
+      }
     } else {
-      extractedText = buffer.toString("utf-8");
+      extractedText = input.buffer.toString("utf-8");
     }
 
     if (!normalizeWhitespace(extractedText)) {
       throw new AppError(400, "EMPTY_DOCUMENT", "Could not extract text from the uploaded file");
     }
 
-    return this.ingestPlainText({
+    const result = await this.ingestPlainText({
       userId: input.userId,
       title: input.fileName,
       content: extractedText,
     });
+
+    logger.info(
+      {
+        userId: input.userId,
+        fileName: input.fileName,
+        chunksCount: result.chunksCount,
+      },
+      "RAG ingest file completed",
+    );
+
+    return result;
   }
 
   async ingestStructuredData(input: { userId: string; format: "json" | "xml"; title: string; content: string }) {
+    logger.info({ userId: input.userId, title: input.title, format: input.format }, "RAG ingest structured data started");
     let structuredText = "";
 
-    if (input.format === "json") {
-      const parsed = JSON.parse(input.content) as unknown;
-      structuredText = flattenObject(parsed).join("\n");
-    } else {
-      const parser = new XMLParser({
-        ignoreAttributes: false,
-        attributeNamePrefix: "@",
-      });
-      const parsed = parser.parse(input.content) as unknown;
-      structuredText = flattenObject(parsed).join("\n");
+    try {
+      if (input.format === "json") {
+        const parsed = JSON.parse(input.content) as unknown;
+        structuredText = flattenObject(parsed).join("\n");
+      } else {
+        const parser = new XMLParser({
+          ignoreAttributes: false,
+          attributeNamePrefix: "@",
+        });
+        const parsed = parser.parse(input.content) as unknown;
+        structuredText = flattenObject(parsed).join("\n");
+      }
+    } catch (error) {
+      logger.warn({ error, userId: input.userId, format: input.format }, "RAG structured parse failed");
+      throw new AppError(400, "STRUCTURED_PARSE_FAILED", `Invalid ${input.format.toUpperCase()} payload`);
     }
 
     if (!normalizeWhitespace(structuredText)) {
       throw new AppError(400, "EMPTY_DOCUMENT", "Structured input did not contain parsable text");
     }
 
-    return this.ingestPlainText({
+    const result = await this.ingestPlainText({
       userId: input.userId,
       title: input.title,
       content: structuredText,
     });
+
+    logger.info({ userId: input.userId, title: input.title, chunksCount: result.chunksCount }, "RAG ingest structured completed");
+    return result;
   }
 
   async ingestWebsite(input: { userId: string; url: string; maxPages: number }) {
+    logger.info({ userId: input.userId, url: input.url, maxPages: input.maxPages }, "RAG website crawl started");
     const rootUrl = new URL(input.url);
+    if (!["http:", "https:"].includes(rootUrl.protocol)) {
+      throw new AppError(400, "INVALID_URL_PROTOCOL", "Only HTTP/HTTPS URLs are supported");
+    }
+
     const visited = new Set<string>();
     const queue: string[] = [rootUrl.toString()];
     const collectedPages: Array<{ url: string; text: string }> = [];
+    const crawlErrors: Array<{ url: string; reason: string }> = [];
 
     while (queue.length > 0 && visited.size < input.maxPages) {
       const currentUrl = queue.shift();
@@ -180,19 +247,28 @@ export class RagService {
 
       visited.add(currentUrl);
 
+      let response: Response | null = null;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), CRAWL_TIMEOUT_MS);
+
       try {
-        const response = await fetch(currentUrl, {
+        response = await fetch(currentUrl, {
           headers: {
             "User-Agent": "voxflow-bot/1.0",
+            Accept: "text/html,application/xhtml+xml",
           },
+          redirect: "follow",
+          signal: controller.signal,
         });
 
         if (!response.ok) {
+          crawlErrors.push({ url: currentUrl, reason: `HTTP ${response.status}` });
           continue;
         }
 
         const contentType = response.headers.get("content-type") || "";
         if (!contentType.includes("text/html")) {
+          crawlErrors.push({ url: currentUrl, reason: `Unsupported content-type ${contentType}` });
           continue;
         }
 
@@ -244,8 +320,12 @@ export class RagService {
             queue.push(nextUrl);
           }
         }
-      } catch {
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Unknown fetch error";
+        crawlErrors.push({ url: currentUrl, reason });
         continue;
+      } finally {
+        clearTimeout(timeout);
       }
     }
 
@@ -254,14 +334,30 @@ export class RagService {
       .join("\n\n");
 
     if (!merged) {
-      throw new AppError(400, "URL_CRAWL_EMPTY", "No crawlable text content found for the provided URL");
+      logger.warn({ userId: input.userId, url: input.url, crawlErrors }, "RAG website crawl produced no content");
+      throw new AppError(400, "URL_CRAWL_EMPTY", "No crawlable text content found for the provided URL", {
+        crawlErrors: crawlErrors.slice(0, 5),
+      });
     }
 
-    return this.ingestPlainText({
+    const result = await this.ingestPlainText({
       userId: input.userId,
       title: `Website Crawl: ${rootUrl.hostname}`,
       content: merged,
     });
+
+    logger.info(
+      {
+        userId: input.userId,
+        url: input.url,
+        visitedPages: visited.size,
+        collectedPages: collectedPages.length,
+        chunksCount: result.chunksCount,
+      },
+      "RAG website crawl completed",
+    );
+
+    return result;
   }
 
   buildPrompt(userMessage: string, contexts: string[]): string {
@@ -270,12 +366,15 @@ export class RagService {
   }
 
   private async ingestPlainText(input: { userId: string; title: string; content: string }) {
+    logger.debug({ userId: input.userId, title: input.title, contentLength: input.content.length }, "RAG plain text ingest preprocessing");
     const normalized = normalizeWhitespace(input.content);
     const chunks = chunkText(normalized);
 
     if (chunks.length === 0) {
       throw new AppError(400, "EMPTY_DOCUMENT", "No usable content found after preprocessing");
     }
+
+    logger.debug({ userId: input.userId, title: input.title, chunksCount: chunks.length }, "RAG chunking completed");
 
     const document = await prisma.knowledgeDocument.create({
       data: {
@@ -329,6 +428,7 @@ export class RagService {
       }
     }
 
+    logger.debug({ textLength: text.length }, "RAG embedding fallback to pseudo vector");
     return this.pseudoEmbedding(text);
   }
 

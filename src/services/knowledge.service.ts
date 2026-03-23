@@ -1,4 +1,6 @@
 import { apiClient } from "@/lib/api-client";
+import { API_BASE } from "@/lib/api-config";
+import { authService } from "@/services/auth.service";
 
 export interface KnowledgeDocumentItem {
   id: string;
@@ -19,30 +21,56 @@ export interface IngestionResult {
   wordCount: number;
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000;
-
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    const slice = bytes.subarray(index, index + chunkSize);
-    binary += String.fromCharCode(...slice);
-  }
-
-  return btoa(binary);
-}
-
 export const knowledgeService = {
   listDocuments(): Promise<KnowledgeDocumentItem[]> {
     return apiClient.get<KnowledgeDocumentItem[]>("/api/knowledge/documents");
   },
 
-  async uploadFile(file: File): Promise<IngestionResult> {
-    return apiClient.post<IngestionResult>("/api/knowledge/ingest/file", {
-      fileName: file.name,
-      mimeType: file.type || "application/octet-stream",
-      contentBase64: await fileToBase64(file),
+  async uploadFile(file: File, onProgress?: (value: number) => void): Promise<IngestionResult> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("title", file.name);
+
+    return new Promise<IngestionResult>((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open("POST", `${API_BASE}/api/knowledge/ingest/file`);
+
+      const accessToken = authService.getAccessToken();
+      if (accessToken) {
+        request.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+      }
+
+      request.upload.onprogress = (event) => {
+        if (!event.lengthComputable || !onProgress) {
+          return;
+        }
+        const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+        onProgress(percent);
+      };
+
+      request.onerror = () => {
+        reject(new Error("Network error while uploading file"));
+      };
+
+      request.onload = () => {
+        try {
+          const parsed = JSON.parse(request.responseText || "{}") as {
+            error?: { message?: string };
+            message?: string;
+          };
+
+          if (request.status >= 200 && request.status < 300) {
+            resolve(parsed as unknown as IngestionResult);
+            return;
+          }
+
+          reject(new Error(parsed.error?.message || parsed.message || `Upload failed with status ${request.status}`));
+        } catch {
+          reject(new Error(`Upload failed with status ${request.status}`));
+        }
+      };
+
+      request.send(formData);
     });
   },
 

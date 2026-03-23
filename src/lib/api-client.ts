@@ -16,8 +16,15 @@ type JsonBody = Record<string, unknown> | Array<unknown> | null;
 
 async function parseErrorResponse(response: Response): Promise<ApiError> {
   try {
-    const payload = (await response.json()) as { message?: string; code?: string };
-    return new ApiError(payload.message || "Request failed", response.status, payload.code);
+    const payload = (await response.json()) as {
+      message?: string;
+      code?: string;
+      error?: { message?: string; code?: string; details?: unknown };
+    };
+
+    const message = payload.error?.message || payload.message || "Request failed";
+    const code = payload.error?.code || payload.code;
+    return new ApiError(message, response.status, code);
   } catch {
     return new ApiError(`Request failed with status ${response.status}`, response.status);
   }

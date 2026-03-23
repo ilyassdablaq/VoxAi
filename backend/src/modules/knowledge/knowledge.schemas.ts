@@ -6,6 +6,10 @@ export const ingestFileSchema = z.object({
   contentBase64: z.string().min(1),
 });
 
+export const ingestFileMultipartFieldsSchema = z.object({
+  title: z.string().min(1).max(255).optional(),
+});
+
 export const ingestStructuredSchema = z.object({
   format: z.enum(["json", "xml"]),
   title: z.string().min(1).max(255),
@@ -13,7 +17,13 @@ export const ingestStructuredSchema = z.object({
 });
 
 export const ingestUrlSchema = z.object({
-  url: z.string().url(),
+  url: z
+    .string()
+    .url()
+    .refine((value) => {
+      const normalized = value.toLowerCase();
+      return normalized.startsWith("http://") || normalized.startsWith("https://");
+    }, "URL must start with http:// or https://"),
   maxPages: z.coerce.number().int().min(1).max(10).default(4),
 });
 
@@ -22,5 +32,6 @@ export const documentIdParamSchema = z.object({
 });
 
 export type IngestFileInput = z.infer<typeof ingestFileSchema>;
+export type IngestFileMultipartFieldsInput = z.infer<typeof ingestFileMultipartFieldsSchema>;
 export type IngestStructuredInput = z.infer<typeof ingestStructuredSchema>;
 export type IngestUrlInput = z.infer<typeof ingestUrlSchema>;
