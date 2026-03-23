@@ -30,24 +30,27 @@ export async function knowledgeRoutes(fastify: FastifyInstance): Promise<void> {
       const user = request.user as { sub: string };
 
       if (request.isMultipart()) {
-        let filePart: any = null;
+        let fileBuffer: Buffer | null = null;
+        let filename = "";
+        let mimetype = "";
         let title = "";
 
         // Iterate through all parts to find file and fields
         for await (const part of request.parts()) {
           if (part.type === "file") {
-            filePart = part;
+            filename = part.filename;
+            mimetype = part.mimetype;
+            fileBuffer = await part.toBuffer();
           } else if (part.type === "field" && part.fieldname === "title") {
             title = (part.value as string)?.trim() || "";
           }
         }
 
-        if (!filePart) {
+        if (!fileBuffer) {
           throw new AppError(400, "FILE_REQUIRED", "No file provided in multipart payload");
         }
 
-        const fileBuffer = await filePart.toBuffer();
-        const lowerName = filePart.filename.toLowerCase();
+        const lowerName = filename.toLowerCase();
         const hasAllowedExtension = allowedExtensions.some((ext) => lowerName.endsWith(ext));
 
         if (!hasAllowedExtension) {
@@ -59,9 +62,9 @@ export async function knowledgeRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         const result = await service.ingestFileMultipart(user.sub, {
-          fileName: title || filePart.filename,
-          originalFileName: filePart.filename,
-          mimeType: filePart.mimetype,
+          fileName: title || filename,
+          originalFileName: filename,
+          mimeType: mimetype,
           buffer: fileBuffer,
         });
 
