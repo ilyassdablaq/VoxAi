@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { authenticate } from "../../common/middleware/auth-middleware.js";
 import { validate } from "../../common/middleware/validate.js";
 import { AppError } from "../../common/errors/app-error.js";
+import { logger } from "../../config/logger.js";
 import { RagService } from "../../services/rag/rag.service.js";
 import { KnowledgeService } from "./knowledge.service.js";
 import {
@@ -28,6 +29,7 @@ export async function knowledgeRoutes(fastify: FastifyInstance): Promise<void> {
     { preHandler: [authenticate] },
     async (request, reply) => {
       const user = request.user as { sub: string };
+      logger.info({ userId: user.sub, isMultipart: request.isMultipart() }, "Knowledge file ingest request received");
 
       if (request.isMultipart()) {
         let fileBuffer: Buffer | null = null;
@@ -60,6 +62,11 @@ export async function knowledgeRoutes(fastify: FastifyInstance): Promise<void> {
         if (!fileBuffer.length) {
           throw new AppError(400, "EMPTY_FILE", "Uploaded file is empty");
         }
+
+        logger.info(
+          { userId: user.sub, filename, mimetype, fileSize: fileBuffer.length, hasTitle: Boolean(title) },
+          "Knowledge file parsed from multipart",
+        );
 
         const result = await service.ingestFileMultipart(user.sub, {
           fileName: title || filename,

@@ -1,5 +1,5 @@
 import { authService } from "@/services/auth.service";
-import { API_BASE } from "@/lib/api-config";
+import { API_BASE, API_BASE_CANDIDATES } from "@/lib/api-config";
 
 export class ApiError extends Error {
   constructor(
@@ -33,13 +33,34 @@ async function parseErrorResponse(response: Response): Promise<ApiError> {
 async function performRequest(path: string, init: RequestInit, retryOnUnauthorized = true): Promise<Response> {
   const token = authService.getAccessToken();
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const requestInit: RequestInit = {
     ...init,
     headers: {
       ...(init.headers || {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-  });
+  };
+
+  const baseCandidates = Array.from(new Set([API_BASE, ...API_BASE_CANDIDATES]));
+  let response: Response | null = null;
+  let lastError: unknown;
+
+  for (const baseUrl of baseCandidates) {
+    try {
+      response = await fetch(`${baseUrl}${path}`, requestInit);
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!response) {
+    throw new ApiError(
+      `Network error while contacting API. Tried: ${baseCandidates.join(", ")}. ${lastError instanceof Error ? lastError.message : ""}`.trim(),
+      0,
+      "API_UNREACHABLE",
+    );
+  }
 
   if (response.status === 401 && retryOnUnauthorized && authService.getRefreshToken()) {
     try {
