@@ -16,6 +16,10 @@ import DataSources from "./pages/DataSources";
 import ConversationChat from "./pages/ConversationChat";
 import Subscriptions from "./pages/Subscriptions";
 import Integrations from "./pages/Integrations";
+import Workflows from "./pages/Workflows";
+import AnalyticsDashboard from "./pages/AnalyticsDashboard";
+import VoiceSettings from "./pages/VoiceSettings";
+import DeveloperPortal from "./pages/DeveloperPortal";
 import NotFound from "./pages/NotFound";
 
 const App = () => (
@@ -61,6 +65,38 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <Integrations />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/workflows"
+            element={
+              <ProtectedRoute>
+                <Workflows />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/analytics"
+            element={
+              <ProtectedRoute>
+                <AnalyticsDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/voice"
+            element={
+              <ProtectedRoute>
+                <VoiceSettings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/developer"
+            element={
+              <ProtectedRoute>
+                <DeveloperPortal />
               </ProtectedRoute>
             }
           />

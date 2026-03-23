@@ -31,6 +31,13 @@ export type TtsResult = {
   mimeType: string;
 };
 
+export type TtsVoiceOptions = {
+  voiceId?: string | null;
+  speed?: number;
+  style?: number;
+  stability?: number;
+};
+
 export interface SttProvider {
   transcribe(audio: Buffer, language: string): Promise<string>;
   transcribeWithMetadata?(audio: Buffer, language: string): Promise<SttResult>;
@@ -47,8 +54,8 @@ export interface LlmProvider {
 }
 
 export interface TtsProvider {
-  speak(text: string, language: string): Promise<Buffer>;
-  speakWithMetadata?(text: string, language: string): Promise<TtsResult>;
+  speak(text: string, language: string, options?: TtsVoiceOptions): Promise<Buffer>;
+  speakWithMetadata?(text: string, language: string, options?: TtsVoiceOptions): Promise<TtsResult>;
 }
 
 export type ProviderSet = {
@@ -122,15 +129,16 @@ export class MockLlmProvider implements LlmProvider {
 }
 
 export class MockTtsProvider implements TtsProvider {
-  async speak(text: string, _language: string): Promise<Buffer> {
+  async speak(text: string, _language: string, _options?: TtsVoiceOptions): Promise<Buffer> {
     return Buffer.from(`MOCK_TTS_AUDIO:${text}`);
   }
 
-  async speakWithMetadata(text: string, language: string): Promise<TtsResult> {
-    const audioBuffer = await this.speak(text, language);
+  async speakWithMetadata(text: string, language: string, options?: TtsVoiceOptions): Promise<TtsResult> {
+    const speed = options?.speed && options.speed > 0 ? options.speed : 1;
+    const audioBuffer = await this.speak(text, language, options);
     return {
       audioBuffer,
-      durationSeconds: estimateTtsDurationSeconds(text),
+      durationSeconds: Number((estimateTtsDurationSeconds(text) / speed).toFixed(3)),
       mimeType: "audio/mpeg",
     };
   }
@@ -263,27 +271,35 @@ export class ElevenLabsTtsProvider implements TtsProvider {
     this.client = new ElevenLabsClient({ apiKey });
   }
 
-  async speak(text: string, language: string): Promise<Buffer> {
-    const result = await this.speakWithMetadata(text, language);
+  async speak(text: string, language: string, options?: TtsVoiceOptions): Promise<Buffer> {
+    const result = await this.speakWithMetadata(text, language, options);
     return result.audioBuffer;
   }
 
-  async speakWithMetadata(text: string, _language: string): Promise<TtsResult> {
-    if (!env.ELEVENLABS_VOICE_ID) {
+  async speakWithMetadata(text: string, _language: string, options?: TtsVoiceOptions): Promise<TtsResult> {
+    const selectedVoiceId = options?.voiceId || env.ELEVENLABS_VOICE_ID;
+    if (!selectedVoiceId) {
       throw new Error("ELEVENLABS_VOICE_ID is required for ElevenLabs TTS provider");
     }
 
-    const audioStream = await this.client.textToSpeech.convert(env.ELEVENLABS_VOICE_ID, {
+    const requestPayload = {
       modelId: env.ELEVENLABS_MODEL,
       text,
-      outputFormat: "mp3_44100_128",
-    });
+      outputFormat: "mp3_44100_128" as const,
+      voiceSettings: {
+        stability: options?.stability ?? 0.5,
+        style: options?.style ?? 0.5,
+      },
+    };
+
+    const audioStream = await this.client.textToSpeech.convert(selectedVoiceId, requestPayload);
 
     const audioBuffer = await streamToBuffer(audioStream);
+    const speed = options?.speed && options.speed > 0 ? options.speed : 1;
 
     return {
       audioBuffer,
-      durationSeconds: estimateTtsDurationSeconds(text),
+      durationSeconds: Number((estimateTtsDurationSeconds(text) / speed).toFixed(3)),
       mimeType: "audio/mpeg",
     };
   }

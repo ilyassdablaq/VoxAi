@@ -1,6 +1,16 @@
 import { logger } from "../../config/logger.js";
+import { VoiceRepository } from "../../modules/voice/voice.repository.js";
 import { RagService } from "../rag/rag.service.js";
-import { ChatMessage, LlmGenerationResult, MockLlmProvider, ProviderSet, SttResult, TtsResult, createProviders } from "./providers.js";
+import {
+  ChatMessage,
+  LlmGenerationResult,
+  MockLlmProvider,
+  ProviderSet,
+  SttResult,
+  TtsResult,
+  TtsVoiceOptions,
+  createProviders,
+} from "./providers.js";
 
 const EMPTY_MP3_BASE64 = "SUQzAwAAAAAA";
 
@@ -23,9 +33,11 @@ function buildLanguageInstructions(language: string): string {
 
 export class AiOrchestratorService {
   private readonly providers: ProviderSet;
+  private readonly voiceRepository: VoiceRepository;
 
   constructor(private readonly ragService: RagService) {
     this.providers = createProviders();
+    this.voiceRepository = new VoiceRepository();
   }
 
   async processVoiceTurn(input: {
@@ -54,7 +66,7 @@ export class AiOrchestratorService {
 
     const llmResult = await this.generateText(`${ragContext}\n\n${buildLanguageInstructions(input.language)}`, llmMessages);
 
-    const ttsResult = await this.speak(llmResult.text, input.language);
+    const ttsResult = await this.speak(input.userId, llmResult.text, input.language);
 
     return {
       transcript: sttResult.text,
@@ -95,7 +107,7 @@ export class AiOrchestratorService {
 
     const llmResult = await this.generateText(`${ragContext}\n\n${buildLanguageInstructions(input.language)}`, llmMessages);
 
-    const ttsResult = await this.speak(llmResult.text, input.language);
+    const ttsResult = await this.speak(input.userId, llmResult.text, input.language);
 
     return {
       responseText: llmResult.text,
@@ -138,7 +150,7 @@ export class AiOrchestratorService {
 
     const llmResult = await this.streamGenerateText(`${ragContext}\n\n${buildLanguageInstructions(input.language)}`, llmMessages, onToken);
 
-    const ttsResult = await this.speak(llmResult.text, input.language);
+    const ttsResult = await this.speak(input.userId, llmResult.text, input.language);
 
     return {
       responseText: llmResult.text,
@@ -224,13 +236,21 @@ export class AiOrchestratorService {
     }
   }
 
-  private async speak(text: string, language: string): Promise<TtsResult> {
+  private async speak(userId: string, text: string, language: string): Promise<TtsResult> {
     try {
+      const voiceSettings = await this.voiceRepository.getOrCreate(userId);
+      const options: TtsVoiceOptions = {
+        voiceId: voiceSettings.voiceId,
+        speed: voiceSettings.speed,
+        style: voiceSettings.style,
+        stability: voiceSettings.stability,
+      };
+
       if (this.providers.tts.speakWithMetadata) {
-        return await this.providers.tts.speakWithMetadata(text, language);
+        return await this.providers.tts.speakWithMetadata(text, language, options);
       }
 
-      const audioBuffer = await this.providers.tts.speak(text, language);
+      const audioBuffer = await this.providers.tts.speak(text, language, options);
       return {
         audioBuffer,
         durationSeconds: 0,
