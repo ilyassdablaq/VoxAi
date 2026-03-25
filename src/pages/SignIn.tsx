@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,18 +6,27 @@ import { motion } from "framer-motion";
 import { Mail, Lock, AlertCircle, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { authService } from "@/services/auth.service";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 
 const SignIn = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
+  const [rememberMe, setRememberMe] = useState(true);
+
+  useEffect(() => {
+    const rememberedEmail = localStorage.getItem("rememberedSignInEmail");
+    if (rememberedEmail) {
+      setFormData((prev) => ({ ...prev, email: rememberedEmail }));
+    }
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -47,8 +56,12 @@ const SignIn = () => {
 
     setLoading(true);
     try {
-      const response = await authService.login(formData.email, formData.password);
-      authService.setTokens(response.accessToken, response.refreshToken);
+      await login(formData.email, formData.password, rememberMe);
+      if (rememberMe) {
+        localStorage.setItem("rememberedSignInEmail", formData.email.trim());
+      } else {
+        localStorage.removeItem("rememberedSignInEmail");
+      }
       toast({
         title: "Success",
         description: "Signed in successfully!",
@@ -92,7 +105,7 @@ const SignIn = () => {
             )}
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} autoComplete="on" className="space-y-4">
               {/* Email */}
               <div className="space-y-2">
                 <label htmlFor="email" className="text-sm font-medium">
@@ -104,6 +117,7 @@ const SignIn = () => {
                     id="email"
                     type="email"
                     name="email"
+                    autoComplete="email"
                     placeholder="you@example.com"
                     value={formData.email}
                     onChange={handleChange}
@@ -129,6 +143,7 @@ const SignIn = () => {
                     id="password"
                     type="password"
                     name="password"
+                    autoComplete="current-password"
                     placeholder="••••••••"
                     value={formData.password}
                     onChange={handleChange}
@@ -137,6 +152,17 @@ const SignIn = () => {
                   />
                 </div>
               </div>
+
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                  disabled={loading}
+                  className="h-4 w-4 rounded border-border"
+                />
+                Angemeldet bleiben
+              </label>
 
               {/* Submit */}
               <Button type="submit" className="w-full" disabled={loading}>

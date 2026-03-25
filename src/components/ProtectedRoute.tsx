@@ -1,13 +1,19 @@
 import { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
-import { authService } from "@/services/auth.service";
+import { useAuth } from "@/hooks/use-auth";
 
 interface ProtectedRouteProps {
   children: ReactNode;
 }
 
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  if (!authService.isLoggedIn()) {
+  const { isLoading, isLoggedIn } = useAuth();
+
+  if (isLoading) {
+    return null;
+  }
+
+  if (!isLoggedIn) {
     return <Navigate to="/sign-in" replace />;
   }
 

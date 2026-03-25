@@ -1,4 +1,4 @@
-import { ConversationStatus, MessageRole } from "@prisma/client";
+import { MessageRole } from "@prisma/client";
 import { prisma } from "../../infra/database/prisma.js";
 import { AnalyticsQueryInput } from "./analytics.schemas.js";
 
@@ -29,37 +29,18 @@ function dayKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function normalizeText(text: string): string {
-  return text.toLowerCase();
+function roundTo2(value: number): number {
+  return Number(value.toFixed(2));
 }
 
-function estimateSentiment(messages: Array<{ content: string }>) {
-  const positiveWords = ["great", "thanks", "resolved", "perfect", "awesome", "happy", "good"];
-  const negativeWords = ["bad", "angry", "broken", "issue", "problem", "slow", "frustrated"];
+function percentile(values: number[], quantile: number): number {
+  if (values.length === 0) {
+    return 0;
+  }
 
-  let positive = 0;
-  let negative = 0;
-
-  messages.forEach((message) => {
-    const normalized = normalizeText(message.content);
-    if (positiveWords.some((word) => normalized.includes(word))) {
-      positive += 1;
-    }
-    if (negativeWords.some((word) => normalized.includes(word))) {
-      negative += 1;
-    }
-  });
-
-  const total = positive + negative;
-  const neutral = Math.max(messages.length - total, 0);
-
-  const toPercent = (value: number) => (messages.length ? Number(((value / messages.length) * 100).toFixed(2)) : 0);
-
-  return {
-    positive: toPercent(positive),
-    neutral: toPercent(neutral),
-    negative: toPercent(negative),
-  };
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(quantile * sorted.length) - 1));
+  return sorted[index];
 }
 
 export class AnalyticsService {
@@ -76,7 +57,7 @@ export class AnalyticsService {
       },
       select: {
         id: true,
-        status: true,
+        title: true,
         createdAt: true,
       },
       orderBy: {
@@ -91,13 +72,15 @@ export class AnalyticsService {
         filters: query,
         kpis: {
           conversationsCount: 0,
-          avgResponseTimeSeconds: 0,
-          resolutionRate: 0,
           totalMessages: 0,
+          totalTokens: 0,
+          avgResponseTimeSeconds: 0,
+          p95ResponseTimeSeconds: 0,
         },
         messageVolume: [],
-        responseTimeSeries: [],
-        sentiment: { positive: 0, neutral: 0, negative: 0 },
+        tokenUsageByDay: [],
+        latencyByDay: [],
+        conversationUsage: [],
       };
     }
 
@@ -113,7 +96,7 @@ export class AnalyticsService {
       select: {
         conversationId: true,
         role: true,
-        content: true,
+        tokenCount: true,
         createdAt: true,
       },
       orderBy: {
@@ -140,16 +123,17 @@ export class AnalyticsService {
       }
     });
 
-    const responseTimeValues = Array.from(responseTimesByConversation.values());
+    const responseTimeValues = Array.from(responseTimesByConversation.values()).map(roundTo2);
     const avgResponseTimeSeconds =
       responseTimeValues.length > 0
-        ? Number((responseTimeValues.reduce((sum, value) => sum + value, 0) / responseTimeValues.length).toFixed(2))
+        ? roundTo2(responseTimeValues.reduce((sum, value) => sum + value, 0) / responseTimeValues.length)
         : 0;
-
-    const resolvedCount = conversations.filter((conversation) => conversation.status === ConversationStatus.ENDED).length;
-    const resolutionRate = Number(((resolvedCount / conversations.length) * 100).toFixed(2));
+    const p95ResponseTimeSeconds = roundTo2(percentile(responseTimeValues, 0.95));
 
     const messageVolumeMap = new Map<string, { userMessages: number; assistantMessages: number }>();
+    const tokenUsageMap = new Map<string, number>();
+    const conversationUsageMap = new Map<string, { totalMessages: number; totalTokens: number }>();
+
     messages.forEach((message) => {
       const key = dayKey(message.createdAt);
       const current = messageVolumeMap.get(key) ?? { userMessages: 0, assistantMessages: 0 };
@@ -159,7 +143,16 @@ export class AnalyticsService {
       if (message.role === MessageRole.ASSISTANT) {
         current.assistantMessages += 1;
       }
+
       messageVolumeMap.set(key, current);
+
+      const tokenCount = message.tokenCount ?? 0;
+      tokenUsageMap.set(key, (tokenUsageMap.get(key) ?? 0) + tokenCount);
+
+      const conversationUsage = conversationUsageMap.get(message.conversationId) ?? { totalMessages: 0, totalTokens: 0 };
+      conversationUsage.totalMessages += 1;
+      conversationUsage.totalTokens += tokenCount;
+      conversationUsageMap.set(message.conversationId, conversationUsage);
     });
 
     const messageVolume = Array.from(messageVolumeMap.entries())
@@ -171,25 +164,58 @@ export class AnalyticsService {
         totalMessages: counts.userMessages + counts.assistantMessages,
       }));
 
-    const responseTimeSeries = conversations.map((conversation) => ({
-      conversationId: conversation.id,
-      date: dayKey(conversation.createdAt),
-      responseTimeSeconds: Number((responseTimesByConversation.get(conversation.id) ?? 0).toFixed(2)),
-    }));
+    const tokenUsageByDay = Array.from(tokenUsageMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, totalTokens]) => ({
+        date,
+        totalTokens,
+      }));
 
-    const sentiment = estimateSentiment(messages.filter((message) => message.role !== MessageRole.SYSTEM));
+    const latencyByDayMap = new Map<string, number[]>();
+    conversations.forEach((conversation) => {
+      const responseTime = responseTimesByConversation.get(conversation.id);
+      if (typeof responseTime !== "number") {
+        return;
+      }
+
+      const date = dayKey(conversation.createdAt);
+      const values = latencyByDayMap.get(date) ?? [];
+      values.push(responseTime);
+      latencyByDayMap.set(date, values);
+    });
+
+    const latencyByDay = Array.from(latencyByDayMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, values]) => ({
+        date,
+        avgResponseTimeSeconds: roundTo2(values.reduce((sum, value) => sum + value, 0) / values.length),
+      }));
+
+    const totalTokens = messages.reduce((sum, message) => sum + (message.tokenCount ?? 0), 0);
+    const conversationById = new Map(conversations.map((conversation) => [conversation.id, conversation]));
+    const conversationUsage = Array.from(conversationUsageMap.entries())
+      .map(([conversationId, usage]) => ({
+        conversationId,
+        conversationTitle: conversationById.get(conversationId)?.title ?? null,
+        totalMessages: usage.totalMessages,
+        totalTokens: usage.totalTokens,
+      }))
+      .sort((a, b) => b.totalTokens - a.totalTokens)
+      .slice(0, 10);
 
     return {
       filters: query,
       kpis: {
         conversationsCount: conversations.length,
-        avgResponseTimeSeconds,
-        resolutionRate,
         totalMessages: messages.length,
+        totalTokens,
+        avgResponseTimeSeconds,
+        p95ResponseTimeSeconds,
       },
       messageVolume,
-      responseTimeSeries,
-      sentiment,
+      tokenUsageByDay,
+      latencyByDay,
+      conversationUsage,
     };
   }
 }

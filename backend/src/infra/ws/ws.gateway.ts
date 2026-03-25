@@ -13,6 +13,7 @@ export function registerWebSocketGateway(
     const typedSocket = socket as WebSocket;
     const { id: conversationId } = request.params as { id: string };
     let authenticatedUserId: string | null = null;
+    let isTextMessageInFlight = false;
     const heartbeatInterval = setInterval(() => {
       if (typedSocket.readyState === WebSocket.OPEN) {
         typedSocket.ping();
@@ -79,6 +80,20 @@ export function registerWebSocketGateway(
             throw new AppError(401, "UNAUTHORIZED", "Authentication failed");
           }
 
+          if (isTextMessageInFlight) {
+            typedSocket.send(
+              JSON.stringify({
+                type: "error",
+                error: {
+                  message: "A response is already being generated. Please wait.",
+                },
+              }),
+            );
+            return;
+          }
+
+          isTextMessageInFlight = true;
+
           await conversationRepository.createMessage({
             conversationId,
             role: "USER",
@@ -130,6 +145,7 @@ export function registerWebSocketGateway(
               },
             }),
           );
+          isTextMessageInFlight = false;
           return;
         }
 
@@ -180,6 +196,7 @@ export function registerWebSocketGateway(
           }),
         );
       } catch (error) {
+        isTextMessageInFlight = false;
         typedSocket.send(
           JSON.stringify({
             type: "error",

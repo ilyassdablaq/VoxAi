@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Play, Plus, Trash2 } from "lucide-react";
+import { Loader2, Play, Plus, Trash2, Lock } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useFeatureAccess } from "@/hooks/use-feature-access";
 import { WorkflowActionType, WorkflowTriggerType, workflowService } from "@/services/workflow.service";
 
 const TRIGGERS: Array<{ value: WorkflowTriggerType; label: string }> = [
@@ -26,6 +27,8 @@ const ACTIONS: Array<{ value: WorkflowActionType; label: string }> = [
 export default function Workflows() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { canAccess } = useFeatureAccess();
+  const hasAccess = canAccess("workflows");
 
   const [name, setName] = useState("High Priority Escalation");
   const [description, setDescription] = useState("Escalate important customer conversations and sync CRM.");
@@ -159,10 +162,21 @@ export default function Workflows() {
               </div>
             </div>
 
-            <Button onClick={() => createMutation.mutate()} disabled={!name.trim() || !description.trim() || isBusy}>
+            <Button 
+              onClick={() => createMutation.mutate()} 
+              disabled={!name.trim() || !description.trim() || isBusy || !hasAccess}
+              className="relative"
+            >
               {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
               Save Workflow
+              {!hasAccess && <Lock className="w-3 h-3 ml-2" />}
             </Button>
+            {!hasAccess && (
+              <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1">
+                <span className="inline-block bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded text-xs font-medium">Pro Only</span>
+                Upgrade to Pro to create workflows
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -187,10 +201,22 @@ export default function Workflows() {
                       </p>
                     </div>
                     <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" onClick={() => runMutation.mutate(workflow.id)} disabled={isBusy}>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => runMutation.mutate(workflow.id)} 
+                        disabled={isBusy || !hasAccess}
+                        title={!hasAccess ? "Pro feature" : "Run workflow"}
+                      >
                         <Play className="w-4 h-4" />
                       </Button>
-                      <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate(workflow.id)} disabled={isBusy}>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => deleteMutation.mutate(workflow.id)} 
+                        disabled={isBusy || !hasAccess}
+                        title={!hasAccess ? "Pro feature" : "Delete workflow"}
+                      >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>

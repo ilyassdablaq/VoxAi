@@ -43,6 +43,17 @@ const envSchema = z.object({
   DEFAULT_AUDIO_CHANNELS: z.coerce.number().int().positive().default(1),
   DEFAULT_AUDIO_BYTES_PER_SAMPLE: z.coerce.number().int().positive().default(2),
   SENTRY_DSN: z.string().optional(),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_SUCCESS_URL: z.string().optional(),
+  STRIPE_CANCEL_URL: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().optional(),
+  SMTP_SECURE: z.coerce.boolean().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+  CONTACT_RECEIVER_EMAIL: z.string().email().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

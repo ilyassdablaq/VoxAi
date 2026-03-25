@@ -12,10 +12,12 @@ import {
   Link as LinkIcon,
   LogOut,
   Mic,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { authService } from "@/services/auth.service";
 import { useToast } from "@/hooks/use-toast";
+import { PlanBadge } from "@/components/PlanBadge";
+import { useAuth } from "@/hooks/use-auth";
 
 interface DashboardShellProps {
   title: string;
@@ -32,15 +34,17 @@ const navItems = [
   { to: "/dashboard/developer", label: "Developer", icon: KeyRound },
   { to: "/dashboard/subscriptions", label: "Subscriptions", icon: CreditCard },
   { to: "/dashboard/integrations", label: "Integrations", icon: LinkIcon },
+  { to: "/dashboard/profile", label: "Profile", icon: User },
   { to: "/dashboard/faq", label: "Help / FAQ", icon: CircleHelp },
 ];
 
 export function DashboardShell({ title, description, children }: DashboardShellProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
-    authService.clearTokens();
+    logout();
     navigate("/");
     toast({ title: "Logged out", description: "See you soon!" });
   };
@@ -90,9 +94,12 @@ export function DashboardShell({ title, description, children }: DashboardShellP
 
       <div className="flex-1 flex flex-col">
         <header className="border-b border-border bg-card">
-          <div className="px-4 sm:px-6 lg:px-8 py-5">
-            <h2 className="text-2xl font-bold">{title}</h2>
-            <p className="text-sm text-muted-foreground mt-1">{description}</p>
+          <div className="px-4 sm:px-6 lg:px-8 py-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">{title}</h2>
+              <p className="text-sm text-muted-foreground mt-1">{description}</p>
+            </div>
+            <PlanBadge />
           </div>
         </header>
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8">{children}</main>

@@ -6,25 +6,55 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly code?: string,
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ApiError";
   }
+
+  isPlanUpgradeRequired(): boolean {
+    return this.status === 403 && this.code === "PLAN_UPGRADE_REQUIRED";
+  }
+
+  isUnauthorized(): boolean {
+    return this.status === 401;
+  }
+
+  isForbidden(): boolean {
+    return this.status === 403;
+  }
 }
 
 type JsonBody = Record<string, unknown> | Array<unknown> | null;
+
+let preferredApiBase: string | null = null;
+
+function getBaseCandidatesInPriorityOrder(): string[] {
+  const uniqueCandidates = Array.from(new Set([API_BASE, ...API_BASE_CANDIDATES]));
+  if (!preferredApiBase || !uniqueCandidates.includes(preferredApiBase)) {
+    return uniqueCandidates;
+  }
+
+  return [preferredApiBase, ...uniqueCandidates.filter((candidate) => candidate !== preferredApiBase)];
+}
 
 async function parseErrorResponse(response: Response): Promise<ApiError> {
   try {
     const payload = (await response.json()) as {
       message?: string;
       code?: string;
-      error?: { message?: string; code?: string; details?: unknown };
+      details?: Record<string, unknown>;
+      error?: { 
+        message?: string; 
+        code?: string; 
+        details?: Record<string, unknown>;
+      };
     };
 
     const message = payload.error?.message || payload.message || "Request failed";
     const code = payload.error?.code || payload.code;
-    return new ApiError(message, response.status, code);
+    const details = payload.error?.details || payload.details;
+    return new ApiError(message, response.status, code, details);
   } catch {
     return new ApiError(`Request failed with status ${response.status}`, response.status);
   }
@@ -41,13 +71,14 @@ async function performRequest(path: string, init: RequestInit, retryOnUnauthoriz
     },
   };
 
-  const baseCandidates = Array.from(new Set([API_BASE, ...API_BASE_CANDIDATES]));
+  const baseCandidates = getBaseCandidatesInPriorityOrder();
   let response: Response | null = null;
   let lastError: unknown;
 
   for (const baseUrl of baseCandidates) {
     try {
       response = await fetch(`${baseUrl}${path}`, requestInit);
+      preferredApiBase = baseUrl;
       break;
     } catch (error) {
       lastError = error;
