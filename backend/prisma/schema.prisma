@@ -43,19 +43,21 @@ enum SubscriptionStatus {
 }
 
 model User {
-  id              String             @id @default(uuid())
-  email           String             @unique
-  passwordHash    String
-  fullName        String
-  role            Role               @default(USER)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  refreshTokens   RefreshToken[]
-  conversations   Conversation[]
-  contactMessages ContactMessage[]
-  subscriptions   Subscription[]
-  usageRecords    Usage[]
-  apiKeys         APIKey[]
+  id                       String             @id @default(uuid())
+  email                    String             @unique
+  passwordHash             String
+  fullName                 String
+  role                     Role               @default(USER)
+  passwordResetToken       String?
+  passwordResetExpiresAt   DateTime?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  refreshTokens            RefreshToken[]
+  conversations            Conversation[]
+  contactMessages          ContactMessage[]
+  subscriptions            Subscription[]
+  usageRecords             Usage[]
+  apiKeys                  APIKey[]
 
   @@index([createdAt])
 }

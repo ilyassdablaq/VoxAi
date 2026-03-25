@@ -133,7 +133,7 @@ const SignIn = () => {
                   <label htmlFor="password" className="text-sm font-medium">
                     Password
                   </label>
-                  <Link to="#" className="text-xs text-primary hover:underline">
+                  <Link to="/forgot-password" className="text-xs text-primary hover:underline">
                     Forgot password?
                   </Link>
                 </div>

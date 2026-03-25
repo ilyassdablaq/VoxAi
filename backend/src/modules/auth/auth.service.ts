@@ -1,10 +1,12 @@
 import bcrypt from "bcryptjs";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { FastifyInstance } from "fastify";
 import { env } from "../../config/env.js";
 import { AppError } from "../../common/errors/app-error.js";
 import { AuthRepository } from "./auth.repository.js";
-import { LoginInput, RefreshInput, RegisterInput } from "./auth.schemas.js";
+import { LoginInput, RefreshInput, RegisterInput, ForgotPasswordInput, ResetPasswordInput } from "./auth.schemas.js";
+import { prisma } from "../../infra/database/prisma.js";
+import { logger } from "../../config/logger.js";
 
 export class AuthService {
   constructor(
@@ -93,7 +95,7 @@ export class AuthService {
     );
 
     const refreshToken = this.fastify.jwt.sign(
-      { email: user.email, role: user.role, type: "refresh" },
+      { email: user.email, role: user.role, type: "refresh", jti: randomUUID() },
       {
         sub: user.id,
         expiresIn: env.JWT_REFRESH_EXPIRES_IN,
@@ -114,5 +116,55 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  async forgotPassword(payload: ForgotPasswordInput) {
+    const user = await this.repository.findUserByEmail(payload.email);
+    if (!user) {
+      logger.debug({ email: payload.email }, "Forgot password request for non-existent email");
+      return;
+    }
+
+    const resetToken = randomBytes(32).toString("hex");
+    const resetTokenHash = this.hashToken(resetToken);
+    const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: resetTokenHash,
+        passwordResetExpiresAt: expiresAt,
+      },
+    });
+
+    logger.info({ email: user.email }, "Password reset token issued");
+  }
+
+  async resetPassword(payload: ResetPasswordInput) {
+    const user = await prisma.user.findFirst({
+      where: {
+        passwordResetToken: this.hashToken(payload.token),
+        passwordResetExpiresAt: {
+          gt: new Date(),
+        },
+      },
+    });
+
+    if (!user) {
+      throw new AppError(401, "INVALID_RESET_TOKEN", "Reset token is invalid or expired");
+    }
+
+    const passwordHash = await bcrypt.hash(payload.newPassword, env.BCRYPT_SALT_ROUNDS);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpiresAt: null,
+      },
+    });
+
+    logger.info({ email: user.email }, "Password reset successfully");
   }
 }

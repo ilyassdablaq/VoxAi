@@ -27,7 +27,34 @@ export class ApiError extends Error {
 
 type JsonBody = Record<string, unknown> | Array<unknown> | null;
 
-let preferredApiBase: string | null = null;
+const API_REQUEST_TIMEOUT_MS = 1500;
+const PREFERRED_API_BASE_STORAGE_KEY = "preferredApiBase";
+
+let preferredApiBase: string | null = (() => {
+  try {
+    return localStorage.getItem(PREFERRED_API_BASE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+})();
+
+function persistPreferredApiBase(baseUrl: string): void {
+  preferredApiBase = baseUrl;
+  try {
+    localStorage.setItem(PREFERRED_API_BASE_STORAGE_KEY, baseUrl);
+  } catch {
+    // no-op in restricted storage environments
+  }
+}
+
+function clearPreferredApiBase(): void {
+  preferredApiBase = null;
+  try {
+    localStorage.removeItem(PREFERRED_API_BASE_STORAGE_KEY);
+  } catch {
+    // no-op in restricted storage environments
+  }
+}
 
 function getBaseCandidatesInPriorityOrder(): string[] {
   const uniqueCandidates = Array.from(new Set([API_BASE, ...API_BASE_CANDIDATES]));
@@ -36,6 +63,20 @@ function getBaseCandidatesInPriorityOrder(): string[] {
   }
 
   return [preferredApiBase, ...uniqueCandidates.filter((candidate) => candidate !== preferredApiBase)];
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 async function parseErrorResponse(response: Response): Promise<ApiError> {
@@ -77,11 +118,14 @@ async function performRequest(path: string, init: RequestInit, retryOnUnauthoriz
 
   for (const baseUrl of baseCandidates) {
     try {
-      response = await fetch(`${baseUrl}${path}`, requestInit);
-      preferredApiBase = baseUrl;
+      response = await fetchWithTimeout(`${baseUrl}${path}`, requestInit, API_REQUEST_TIMEOUT_MS);
+      persistPreferredApiBase(baseUrl);
       break;
     } catch (error) {
       lastError = error;
+      if (preferredApiBase === baseUrl) {
+        clearPreferredApiBase();
+      }
     }
   }
 

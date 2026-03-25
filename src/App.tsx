@@ -29,6 +29,8 @@ const DashboardFaq = lazy(() => import("./pages/DashboardFaq"));
 const Profile = lazy(() => import("./pages/Profile"));
 const StripeSuccess = lazy(() => import("./pages/StripeSuccess").then((module) => ({ default: module.StripeSuccess })));
 const StripeCancel = lazy(() => import("./pages/StripeCancel").then((module) => ({ default: module.StripeCancel })));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const routeFallback = (
@@ -54,6 +56,8 @@ const App = () => (
               <Route path="/contact" element={<Contact />} />
               <Route path="/sign-up" element={<SignUp />} />
               <Route path="/sign-in" element={<SignIn />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/stripe-success" element={<StripeSuccess />} />
               <Route path="/stripe-cancel" element={<StripeCancel />} />
               <Route
