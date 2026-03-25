@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, memo, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -31,6 +31,27 @@ interface ChatMessage {
   content: string;
   createdAt: string;
 }
+
+const ChatBubble = memo(function ChatBubble({ message }: { message: ChatMessage }) {
+  const isUser = message.role === "USER";
+
+  return (
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+      <div className="max-w-[80%] space-y-1">
+        <div
+          className={`rounded-xl px-4 py-2 text-sm ${
+            isUser ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-secondary text-secondary-foreground rounded-bl-sm"
+          }`}
+        >
+          {message.content}
+        </div>
+        <p className={`text-[11px] text-muted-foreground ${isUser ? "text-right" : "text-left"}`}>
+          {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </p>
+      </div>
+    </div>
+  );
+});
 
 type BrowserSpeechRecognition = {
   continuous: boolean;
@@ -75,6 +96,7 @@ export default function ConversationChat() {
   );
   const [isListening, setIsListening] = useState(false);
   const [speechRecognitionSupported, setSpeechRecognitionSupported] = useState(false);
+  const [isAwaitingAssistantResponse, setIsAwaitingAssistantResponse] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -82,6 +104,7 @@ export default function ConversationChat() {
   const streamedAssistantRef = useRef("");
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const initialAutoScrollDoneRef = useRef(false);
 
   const {
     data: initialMessages,
@@ -214,6 +237,7 @@ export default function ConversationChat() {
                 createdAt: payload.data.createdAt ?? new Date().toISOString(),
               }),
             );
+            setIsAwaitingAssistantResponse(false);
             setStreamedAssistantText("");
             return;
           }
@@ -230,6 +254,7 @@ export default function ConversationChat() {
               );
               setStreamedAssistantText("");
             }
+            setIsAwaitingAssistantResponse(false);
             toast({
               title: "Chat error",
               description: payload.error.message,
@@ -251,6 +276,7 @@ export default function ConversationChat() {
 
       socket.onclose = () => {
         setConnectionState("disconnected");
+        setIsAwaitingAssistantResponse(false);
         if (!shouldReconnectRef.current) {
           return;
         }
@@ -282,7 +308,9 @@ export default function ConversationChat() {
   }, [id, toast]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const behavior = initialAutoScrollDoneRef.current ? "smooth" : "auto";
+    messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
+    initialAutoScrollDoneRef.current = true;
   }, [chatMessages, streamedAssistantText]);
 
   const connectionLabel = useMemo(() => {
@@ -311,6 +339,12 @@ export default function ConversationChat() {
       });
       return;
     }
+
+    if (isAwaitingAssistantResponse) {
+      return;
+    }
+
+    setIsAwaitingAssistantResponse(true);
 
     setChatMessages((current) => [
       ...current,
@@ -365,7 +399,7 @@ export default function ConversationChat() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <header className="border-b border-border bg-card">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")}>
@@ -391,14 +425,18 @@ export default function ConversationChat() {
         </div>
       </header>
 
-      <main className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 flex flex-col">
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex-1 flex flex-col bg-card border border-border rounded-xl overflow-hidden">
+      <main className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex-1 min-h-0 flex flex-col">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex-1 min-h-0 flex flex-col bg-card border border-border rounded-xl overflow-hidden"
+        >
           <div className="p-4 border-b border-border">
             <h1 className="text-lg font-semibold">Conversation</h1>
             <p className="text-xs text-muted-foreground">ID: {id}</p>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="chat-scrollbar flex-1 min-h-0 overflow-y-auto overscroll-contain scroll-smooth p-4 space-y-3">
             {isLoading ? (
               <div className="space-y-3">
                 {[0, 1, 2].map((item) => (
@@ -423,27 +461,7 @@ export default function ConversationChat() {
               <div className="text-center py-10 text-muted-foreground text-sm">No messages yet. Start the conversation below.</div>
             ) : null}
 
-            {!isLoading && !isError
-              ? chatMessages.map((message) => {
-                  const isUser = message.role === "USER";
-                  return (
-                    <div key={message.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-                      <div className="max-w-[80%] space-y-1">
-                        <div
-                          className={`rounded-xl px-4 py-2 text-sm ${
-                          isUser ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-secondary text-secondary-foreground rounded-bl-sm"
-                          }`}
-                        >
-                          {message.content}
-                        </div>
-                        <p className={`text-[11px] text-muted-foreground ${isUser ? "text-right" : "text-left"}`}>
-                          {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })
-              : null}
+            {!isLoading && !isError ? chatMessages.map((message) => <ChatBubble key={message.id} message={message} />) : null}
 
             {streamedAssistantText ? (
               <div className="flex justify-start">
@@ -471,8 +489,12 @@ export default function ConversationChat() {
             >
               {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </Button>
-            <Button type="submit" disabled={connectionState !== "connected" || !inputValue.trim()}>
-              {connectionState === "connecting" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            <Button type="submit" disabled={connectionState !== "connected" || !inputValue.trim() || isAwaitingAssistantResponse}>
+              {connectionState === "connecting" || isAwaitingAssistantResponse ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
             </Button>
           </form>
         </motion.div>

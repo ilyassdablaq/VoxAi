@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bar, BarChart, CartesianGrid, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell, LineChart, Line } from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, LineChart, Line } from "recharts";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { analyticsService, AnalyticsRange } from "@/services/analytics.service";
@@ -15,16 +15,8 @@ export default function AnalyticsDashboard() {
     queryFn: () => analyticsService.getDashboard(range),
   });
 
-  const sentimentData = data
-    ? [
-        { name: "Positive", value: data.sentiment.positive, color: "#22c55e" },
-        { name: "Neutral", value: data.sentiment.neutral, color: "#94a3b8" },
-        { name: "Negative", value: data.sentiment.negative, color: "#ef4444" },
-      ]
-    : [];
-
   return (
-    <DashboardShell title="Analytics" description="Track chatbot performance, response quality, and conversation outcomes.">
+    <DashboardShell title="Analytics" description="Usage and performance insights for your conversations.">
       <div className="space-y-6">
         <Card>
           <CardHeader>
@@ -51,16 +43,19 @@ export default function AnalyticsDashboard() {
             <CardContent><p className="text-3xl font-bold">{isLoading ? "..." : data?.kpis.conversationsCount ?? 0}</p></CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Avg Response Time</CardTitle></CardHeader>
-            <CardContent><p className="text-3xl font-bold">{isLoading ? "..." : `${data?.kpis.avgResponseTimeSeconds ?? 0}s`}</p></CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-base">Resolution Rate</CardTitle></CardHeader>
-            <CardContent><p className="text-3xl font-bold">{isLoading ? "..." : `${data?.kpis.resolutionRate ?? 0}%`}</p></CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-base">Total Messages</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Message Volume</CardTitle></CardHeader>
             <CardContent><p className="text-3xl font-bold">{isLoading ? "..." : data?.kpis.totalMessages ?? 0}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Token Usage</CardTitle></CardHeader>
+            <CardContent><p className="text-3xl font-bold">{isLoading ? "..." : data?.kpis.totalTokens ?? 0}</p></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Latency (avg / p95)</CardTitle></CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold">{isLoading ? "..." : `${data?.kpis.avgResponseTimeSeconds ?? 0}s`}</p>
+              <p className="text-xs text-muted-foreground mt-1">{isLoading ? "" : `P95: ${data?.kpis.p95ResponseTimeSeconds ?? 0}s`}</p>
+            </CardContent>
           </Card>
         </div>
 
@@ -85,36 +80,56 @@ export default function AnalyticsDashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Sentiment Distribution</CardTitle>
+              <CardTitle>Token Usage Over Time</CardTitle>
             </CardHeader>
             <CardContent className="h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={sentimentData} dataKey="value" nameKey="name" outerRadius={110} label>
-                    {sentimentData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card className="xl:col-span-2">
-            <CardHeader>
-              <CardTitle>Response Time by Conversation</CardTitle>
-            </CardHeader>
-            <CardContent className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data?.responseTimeSeries ?? []}>
+                <LineChart data={data?.tokenUsageByDay ?? []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip />
-                  <Line dataKey="responseTimeSeconds" stroke="#f59e0b" strokeWidth={2} dot={false} name="Response time (s)" />
+                  <Line dataKey="totalTokens" stroke="#6366f1" strokeWidth={2} dot={false} name="Tokens" />
                 </LineChart>
               </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Response Latency Over Time</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data?.latencyByDay ?? []}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line dataKey="avgResponseTimeSeconds" stroke="#f59e0b" strokeWidth={2} dot={false} name="Avg latency (s)" />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Top Conversations by Token Usage</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {(data?.conversationUsage ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">No conversation usage data in this range.</p>
+              ) : (
+                (data?.conversationUsage ?? []).map((conversation) => (
+                  <div key={conversation.conversationId} className="flex items-center justify-between border border-border rounded-md px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium">{conversation.conversationTitle || `Conversation ${conversation.conversationId.slice(0, 8)}`}</p>
+                      <p className="text-xs text-muted-foreground">{conversation.totalMessages} messages</p>
+                    </div>
+                    <p className="text-sm font-semibold">{conversation.totalTokens} tokens</p>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </div>

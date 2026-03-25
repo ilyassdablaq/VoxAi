@@ -9,9 +9,10 @@ export interface AnalyticsDashboardData {
   };
   kpis: {
     conversationsCount: number;
-    avgResponseTimeSeconds: number;
-    resolutionRate: number;
     totalMessages: number;
+    totalTokens: number;
+    avgResponseTimeSeconds: number;
+    p95ResponseTimeSeconds: number;
   };
   messageVolume: Array<{
     date: string;
@@ -19,16 +20,20 @@ export interface AnalyticsDashboardData {
     assistantMessages: number;
     totalMessages: number;
   }>;
-  responseTimeSeries: Array<{
-    conversationId: string;
+  tokenUsageByDay: Array<{
     date: string;
-    responseTimeSeconds: number;
+    totalTokens: number;
   }>;
-  sentiment: {
-    positive: number;
-    neutral: number;
-    negative: number;
-  };
+  latencyByDay: Array<{
+    date: string;
+    avgResponseTimeSeconds: number;
+  }>;
+  conversationUsage: Array<{
+    conversationId: string;
+    conversationTitle: string | null;
+    totalMessages: number;
+    totalTokens: number;
+  }>;
 }
 
 export const analyticsService = {

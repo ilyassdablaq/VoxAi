@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { ApiError, apiClient } from "@/lib/api-client";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SectionHeading from "@/components/SectionHeading";
@@ -20,18 +21,35 @@ const Contact = () => {
   const [form, setForm] = useState({ name: "", email: "", company: "", message: "" });
   const [sending, setSending] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.message) {
       toast({ title: "Please fill in all required fields.", variant: "destructive" });
       return;
     }
+
     setSending(true);
-    setTimeout(() => {
-      setSending(false);
+
+    try {
+      await apiClient.post<{ id: string }>("/api/contact", form);
       toast({ title: "Message sent!", description: "We'll get back to you within 24 hours." });
+      setSending(false);
       setForm({ name: "", email: "", company: "", message: "" });
-    }, 1500);
+    } catch (error) {
+      setSending(false);
+      const description =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Unable to send your message right now.";
+
+      toast({
+        title: "Send failed",
+        description,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -55,7 +73,7 @@ const Contact = () => {
                   </div>
                   <div>
                     <h4 className="font-heading font-semibold text-foreground">Email Us</h4>
-                    <p className="text-sm text-muted-foreground">ilyassdablaq@outlook.com</p>
+                    <p className="text-sm text-muted-foreground">ilyassdablaq@outlook.de</p>
                   </div>
                 </div>
                 <div className="glass rounded-xl p-5 flex items-start gap-4">

@@ -92,7 +92,7 @@ const Pricing = () => (
                 variant={plan.highlighted ? "default" : "outline"}
                 asChild
               >
-                <Link to="/contact">
+                <Link to={plan.name === "Enterprise" ? "/contact" : "/sign-up"}>
                   {plan.cta} <ArrowRight className="ml-2 w-4 h-4" />
                 </Link>
               </Button>

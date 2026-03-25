@@ -14,6 +14,8 @@ import { integrationRoutes } from "./modules/integration/integration.routes.js";
 import { knowledgeRoutes } from "./modules/knowledge/knowledge.routes.js";
 import { workflowRoutes } from "./modules/workflow/workflow.routes.js";
 import { analyticsRoutes } from "./modules/analytics/analytics.routes.js";
+import { subscriptionRoutes } from "./modules/subscription/subscription.routes.js";
+import { userRoutes } from "./modules/user/user.routes.js";
 import { voiceRoutes } from "./modules/voice/voice.routes.js";
 import { developerRoutes } from "./modules/developer/developer.routes.js";
 import { registerWebSocketGateway } from "./infra/ws/ws.gateway.js";
@@ -67,6 +69,7 @@ export async function buildApp() {
       contact: "/api/contact",
       workflows: "/api/workflows",
       analytics: "/api/analytics/dashboard",
+      users: "/api/users/me",
       voice: "/api/voice/settings",
       developer: "/api/developer/keys",
     },
@@ -87,6 +90,8 @@ export async function buildApp() {
   await app.register(knowledgeRoutes);
   await app.register(workflowRoutes);
   await app.register(analyticsRoutes);
+  await app.register(subscriptionRoutes);
+  await app.register(userRoutes);
   await app.register(voiceRoutes);
   await app.register(developerRoutes);
 

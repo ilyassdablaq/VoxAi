@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import { API_BASE } from "@/lib/api-config";
+import { API_BASE, API_BASE_CANDIDATES } from "@/lib/api-config";
 import { authService } from "@/services/auth.service";
 
 export interface ConversationMessage {
@@ -57,8 +57,11 @@ export interface ErrorEventPayload {
 
 export type ConversationSocketEvent = AssistantResponseEvent | AssistantDeltaEvent | TranscriptionEvent | ErrorEventPayload;
 
-function buildWebSocketUrl(conversationId: string, token: string) {
-  const parsed = new URL(API_BASE);
+const WS_BASE_CANDIDATES = Array.from(new Set([API_BASE, ...API_BASE_CANDIDATES]));
+let wsBaseIndex = 0;
+
+function buildWebSocketUrl(baseUrl: string, conversationId: string, token: string) {
+  const parsed = new URL(baseUrl);
   const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${parsed.host}/ws/conversations/${conversationId}?token=${encodeURIComponent(token)}`;
 }
@@ -94,6 +97,9 @@ export const conversationService = {
       throw new Error("You must be signed in to open this conversation.");
     }
 
-    return new WebSocket(buildWebSocketUrl(conversationId, accessToken));
+    const selectedBase = WS_BASE_CANDIDATES[wsBaseIndex % WS_BASE_CANDIDATES.length];
+    wsBaseIndex += 1;
+
+    return new WebSocket(buildWebSocketUrl(selectedBase, conversationId, accessToken));
   },
 };

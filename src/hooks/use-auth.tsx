@@ -1,0 +1,179 @@
+import { createContext, ReactNode, useContext, useEffect, useState } from "react";
+import { authService } from "@/services/auth.service";
+import { subscriptionService } from "@/services/subscription.service";
+
+export interface Subscription {
+  id: string;
+  userId: string;
+  planId: string;
+  status: string;
+  startsAt: string;
+  endsAt: string | null;
+  plan: Plan;
+}
+
+export interface Plan {
+  id: string;
+  key: string;
+  name: string;
+  type: "FREE" | "PRO" | "ENTERPRISE";
+  interval: "MONTHLY" | "YEARLY";
+  priceCents: number;
+  voiceMinutes: number;
+  tokenLimit: number;
+  features: Record<string, unknown>;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+}
+
+export interface AuthContextType {
+  user: User | null;
+  subscription: Subscription | null;
+  isLoading: boolean;
+  isLoggedIn: boolean;
+  isPro: boolean;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  register: (email: string, password: string, fullName: string) => Promise<void>;
+  logout: () => void;
+  refreshSubscription: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const hasAccessToken = !!authService.getAccessToken();
+        const hasRefreshToken = !!authService.getRefreshToken();
+
+        if (!hasAccessToken && !hasRefreshToken) {
+          setUser(null);
+          setSubscription(null);
+          return;
+        }
+
+        if (!authService.isLoggedIn() && hasRefreshToken) {
+          await authService.refreshTokens();
+        }
+
+        const profile = await authService.getCurrentUser();
+        setUser({
+          id: profile.id,
+          email: profile.email,
+          fullName: profile.fullName,
+          role: profile.role,
+        });
+
+        try {
+          const sub = await subscriptionService.getCurrentSubscription();
+          setSubscription(sub);
+        } catch (error) {
+          console.error("Failed to fetch subscription:", error);
+        }
+      } catch (error) {
+        console.error("Auth initialization failed:", error);
+        authService.clearTokens();
+        setUser(null);
+        setSubscription(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    init();
+  }, []);
+
+  const login = async (email: string, password: string, rememberMe = true) => {
+    setIsLoading(true);
+    try {
+      const response = await authService.login(email, password);
+      setUser(response.user);
+      authService.setTokens(response.accessToken, response.refreshToken, rememberMe);
+
+      try {
+        const sub = await subscriptionService.getCurrentSubscription();
+        setSubscription(sub);
+      } catch {
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const register = async (
+    email: string,
+    password: string,
+    fullName: string
+  ) => {
+    setIsLoading(true);
+    try {
+      const response = await authService.register(email, password, fullName);
+      setUser(response.user);
+      authService.setTokens(response.accessToken, response.refreshToken);
+
+      try {
+        const sub = await subscriptionService.getCurrentSubscription();
+        setSubscription(sub);
+      } catch {
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = () => {
+    setUser(null);
+    setSubscription(null);
+    authService.clearTokens();
+  };
+
+  const refreshSubscription = async () => {
+    if (!authService.getAccessToken()) return;
+    try {
+      const sub = await subscriptionService.getCurrentSubscription();
+      setSubscription(sub);
+    } catch (error) {
+      console.error("Failed to refresh subscription:", error);
+    }
+  };
+
+  const isPro =
+    subscription?.plan.type === "PRO" ||
+    subscription?.plan.type === "ENTERPRISE";
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        subscription,
+        isLoading,
+        isLoggedIn: !!user,
+        isPro,
+        login,
+        register,
+        logout,
+        refreshSubscription,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+  return context;
+}

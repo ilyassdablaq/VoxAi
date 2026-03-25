@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { authenticate } from "../../common/middleware/auth-middleware.js";
+import { requiresPlan } from "../../common/middleware/plan-guard.js";
 import { validate } from "../../common/middleware/validate.js";
 import {
   CreateWorkflowInput,
@@ -12,6 +13,7 @@ import {
 } from "./workflow.schemas.js";
 import { WorkflowRepository } from "./workflow.repository.js";
 import { WorkflowService } from "./workflow.service.js";
+import { PLAN_TYPES } from "../../common/constants/plan.constants.js";
 
 export async function workflowRoutes(fastify: FastifyInstance): Promise<void> {
   const service = new WorkflowService(new WorkflowRepository());
@@ -23,7 +25,7 @@ export async function workflowRoutes(fastify: FastifyInstance): Promise<void> {
 
   fastify.post(
     "/api/workflows",
-    { preHandler: [authenticate, validate({ body: createWorkflowSchema })] },
+    { preHandler: [authenticate, requiresPlan(PLAN_TYPES.PRO), validate({ body: createWorkflowSchema })] },
     async (request, reply) => {
       const user = request.user as { sub: string };
       const workflow = await service.createWorkflow(user.sub, request.body as CreateWorkflowInput);
@@ -33,7 +35,7 @@ export async function workflowRoutes(fastify: FastifyInstance): Promise<void> {
 
   fastify.patch(
     "/api/workflows/:id",
-    { preHandler: [authenticate, validate({ params: workflowIdParamSchema, body: updateWorkflowSchema })] },
+    { preHandler: [authenticate, requiresPlan(PLAN_TYPES.PRO), validate({ params: workflowIdParamSchema, body: updateWorkflowSchema })] },
     async (request) => {
       const user = request.user as { sub: string };
       const { id } = request.params as { id: string };
@@ -43,7 +45,7 @@ export async function workflowRoutes(fastify: FastifyInstance): Promise<void> {
 
   fastify.delete(
     "/api/workflows/:id",
-    { preHandler: [authenticate, validate({ params: workflowIdParamSchema })] },
+    { preHandler: [authenticate, requiresPlan(PLAN_TYPES.PRO), validate({ params: workflowIdParamSchema })] },
     async (request, reply) => {
       const user = request.user as { sub: string };
       const { id } = request.params as { id: string };
@@ -54,7 +56,7 @@ export async function workflowRoutes(fastify: FastifyInstance): Promise<void> {
 
   fastify.post(
     "/api/workflows/:id/run",
-    { preHandler: [authenticate, validate({ params: workflowIdParamSchema, body: runWorkflowSchema })] },
+    { preHandler: [authenticate, requiresPlan(PLAN_TYPES.PRO), validate({ params: workflowIdParamSchema, body: runWorkflowSchema })] },
     async (request) => {
       const user = request.user as { sub: string };
       const { id } = request.params as { id: string };

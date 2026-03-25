@@ -13,6 +13,9 @@ const EMBEDDING_DIMENSION = 1536;
 const CHUNK_WORDS = 400;
 const CHUNK_OVERLAP_WORDS = 70;
 const CRAWL_TIMEOUT_MS = 12000;
+const RETRIEVAL_CACHE_TTL_MS = 45_000;
+const RETRIEVAL_CACHE_MAX_ITEMS = 1_000;
+const EMBEDDING_CONCURRENCY = 4;
 const insecureTlsAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
 function isTlsCertificateError(error: unknown): boolean {
@@ -79,8 +82,14 @@ function flattenObject(value: unknown, path = "root", lines: string[] = []): str
   return lines;
 }
 
+type RetrievalCacheEntry = {
+  expiresAt: number;
+  contexts: string[];
+};
+
 export class RagService {
   private readonly embeddingClient: OpenAI | null;
+  private readonly retrievalCache = new Map<string, RetrievalCacheEntry>();
 
   constructor() {
     this.embeddingClient = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
@@ -88,6 +97,14 @@ export class RagService {
 
   async retrieveContext(userId: string, queryText: string, topK = 4): Promise<string[]> {
     logger.debug({ userId, topK, queryLength: queryText.length }, "RAG retrieval started");
+
+    const cacheKey = this.getRetrievalCacheKey(userId, queryText, topK);
+    const cached = this.retrievalCache.get(cacheKey);
+    const now = Date.now();
+    if (cached && cached.expiresAt > now) {
+      return cached.contexts;
+    }
+
     const queryEmbedding = await this.embedText(queryText);
     const embeddingSql = toVectorSql(queryEmbedding);
 
@@ -104,6 +121,7 @@ export class RagService {
     )) as Array<{ chunk_text: string }>;
 
     const contexts = rows.map((row) => row.chunk_text);
+    this.setRetrievalCache(cacheKey, contexts);
     logger.debug({ userId, retrievedChunks: contexts.length }, "RAG retrieval completed");
     return contexts;
   }
@@ -136,6 +154,8 @@ export class RagService {
     if (deleted.count === 0) {
       throw new AppError(404, "DOCUMENT_NOT_FOUND", "Knowledge document not found");
     }
+
+    this.invalidateRetrievalCacheForUser(userId);
   }
 
   async ingestFromUpload(input: { userId: string; fileName: string; mimeType: string; contentBase64: string }) {
@@ -202,6 +222,8 @@ export class RagService {
       content: extractedText,
     });
 
+    this.invalidateRetrievalCacheForUser(input.userId);
+
     logger.info(
       {
         userId: input.userId,
@@ -244,6 +266,8 @@ export class RagService {
       title: input.title,
       content: structuredText,
     });
+
+    this.invalidateRetrievalCacheForUser(input.userId);
 
     logger.info({ userId: input.userId, title: input.title, chunksCount: result.chunksCount }, "RAG ingest structured completed");
     return result;
@@ -406,6 +430,8 @@ export class RagService {
       content: merged,
     });
 
+    this.invalidateRetrievalCacheForUser(input.userId);
+
     logger.info(
       {
         userId: input.userId,
@@ -425,6 +451,33 @@ export class RagService {
     return `You are VoxAI assistant. Use only the provided context when it is relevant, and be honest when context is missing.\n\nContext:\n${contextText}\n\nUser:\n${userMessage}`;
   }
 
+  private getRetrievalCacheKey(userId: string, queryText: string, topK: number): string {
+    const queryHash = createHash("sha256").update(normalizeWhitespace(queryText).toLowerCase()).digest("hex");
+    return `${userId}:${topK}:${queryHash}`;
+  }
+
+  private setRetrievalCache(cacheKey: string, contexts: string[]): void {
+    this.retrievalCache.set(cacheKey, {
+      contexts,
+      expiresAt: Date.now() + RETRIEVAL_CACHE_TTL_MS,
+    });
+
+    if (this.retrievalCache.size > RETRIEVAL_CACHE_MAX_ITEMS) {
+      const oldestKey = this.retrievalCache.keys().next().value;
+      if (oldestKey) {
+        this.retrievalCache.delete(oldestKey);
+      }
+    }
+  }
+
+  private invalidateRetrievalCacheForUser(userId: string): void {
+    for (const cacheKey of this.retrievalCache.keys()) {
+      if (cacheKey.startsWith(`${userId}:`)) {
+        this.retrievalCache.delete(cacheKey);
+      }
+    }
+  }
+
   private async ingestPlainText(input: { userId: string; title: string; content: string }) {
     logger.debug({ userId: input.userId, title: input.title, contentLength: input.content.length }, "RAG plain text ingest preprocessing");
     const normalized = normalizeWhitespace(input.content);
@@ -437,16 +490,7 @@ export class RagService {
     logger.debug({ userId: input.userId, title: input.title, chunksCount: chunks.length }, "RAG chunking completed");
 
     try {
-      const chunkEmbeddings = await Promise.all(
-        chunks.map(async (chunk) => {
-          const embedding = await this.embedText(chunk);
-          return {
-            id: randomUUID(),
-            chunk,
-            vectorText: toVectorSql(embedding),
-          };
-        }),
-      );
+      const chunkEmbeddings = await this.embedChunksWithConcurrency(chunks);
 
       const document = await prisma.$transaction(async (tx) => {
         const createdDocument = await tx.knowledgeDocument.create({
@@ -487,6 +531,27 @@ export class RagService {
       }
       throw new AppError(500, "CHUNK_STORE_FAILED", "Failed to store extracted content in vector database");
     }
+  }
+
+  private async embedChunksWithConcurrency(chunks: string[]) {
+    const results: Array<{ id: string; chunk: string; vectorText: string }> = [];
+
+    for (let start = 0; start < chunks.length; start += EMBEDDING_CONCURRENCY) {
+      const batch = chunks.slice(start, start + EMBEDDING_CONCURRENCY);
+      const embeddedBatch = await Promise.all(
+        batch.map(async (chunk) => {
+          const embedding = await this.embedText(chunk);
+          return {
+            id: randomUUID(),
+            chunk,
+            vectorText: toVectorSql(embedding),
+          };
+        }),
+      );
+      results.push(...embeddedBatch);
+    }
+
+    return results;
   }
 
   private async embedText(text: string): Promise<number[]> {

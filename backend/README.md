@@ -78,3 +78,16 @@ From repo root:
 ## Notes
 - AI providers are modular; mock providers included.
 - Replace `Mock*Provider` classes with real SDK providers (OpenAI, Deepgram, ElevenLabs, etc.).
+
+## Contact Email Delivery
+
+`POST /api/contact` stores each message in the database. To also receive an email notification, configure SMTP in `backend/.env`:
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `SMTP_FROM` (optional, defaults to `SMTP_USER`)
+- `CONTACT_RECEIVER_EMAIL` (the inbox that should receive contact requests)
+
+If these values are missing, contact messages are still saved to the DB but no email is sent.

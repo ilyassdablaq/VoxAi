@@ -6,12 +6,13 @@ import { motion } from "framer-motion";
 import { Mail, Lock, User, AlertCircle, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { authService } from "@/services/auth.service";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 
 const SignUp = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { register } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
@@ -61,8 +62,7 @@ const SignUp = () => {
 
     setLoading(true);
     try {
-      const response = await authService.register(formData.email, formData.password, formData.fullName);
-      authService.setTokens(response.accessToken, response.refreshToken);
+      await register(formData.email, formData.password, formData.fullName);
       toast({
         title: "Success",
         description: "Account created successfully!",

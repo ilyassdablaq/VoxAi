@@ -1,11 +1,13 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Check, Loader2 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { subscriptionService } from "@/services/subscription.service";
 
 const fallbackPlans = [
@@ -54,8 +56,10 @@ function normalizeFeatures(features: unknown): string[] {
 }
 
 export default function Subscriptions() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { subscription } = useAuth();
 
   const { data: plans = [], isLoading: isPlansLoading } = useQuery({
     queryKey: ["plans"],
@@ -69,16 +73,15 @@ export default function Subscriptions() {
 
   const currentPlanKey = currentSubscription?.plan?.key;
 
-  const changePlanMutation = useMutation({
-    mutationFn: (planKey: string) => subscriptionService.changePlan(planKey),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["current-subscription"] });
-      toast({ title: "Plan updated", description: "Your subscription plan has been updated." });
+  const upgradeMutation = useMutation({
+    mutationFn: (planKey: string) => subscriptionService.startUpgrade(planKey),
+    onSuccess: (checkoutUrl) => {
+      window.location.href = checkoutUrl;
     },
     onError: (error) => {
       toast({
-        title: "Plan change failed",
-        description: error instanceof Error ? error.message : "Unable to change plan",
+        title: "Upgrade failed",
+        description: error instanceof Error ? error.message : "Unable to start upgrade",
         variant: "destructive",
       });
     },
@@ -161,10 +164,10 @@ export default function Subscriptions() {
                   <Button
                     className="w-full"
                     variant={isCurrent ? "secondary" : "default"}
-                    disabled={isCurrent || changePlanMutation.isPending}
-                    onClick={() => changePlanMutation.mutate(plan.key)}
+                    disabled={isCurrent || upgradeMutation.isPending}
+                    onClick={() => upgradeMutation.mutate(plan.key)}
                   >
-                    {changePlanMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : isCurrent ? "Current Plan" : "Select Plan"}
+                    {upgradeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : isCurrent ? "Current Plan" : "Upgrade to " + plan.name}
                   </Button>
                 </CardContent>
               </Card>

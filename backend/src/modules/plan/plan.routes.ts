@@ -16,11 +16,6 @@ export async function planRoutes(fastify: FastifyInstance): Promise<void> {
     return service.listPlans();
   });
 
-  fastify.get("/api/subscriptions/current", { preHandler: [authenticate] }, async (request) => {
-    const user = request.user as { sub: string };
-    return service.getCurrentSubscription(user.sub);
-  });
-
   fastify.post(
     "/api/subscriptions/change",
     { preHandler: [authenticate, validate({ body: changePlanSchema })] },
