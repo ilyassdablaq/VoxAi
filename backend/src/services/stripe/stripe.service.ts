@@ -145,12 +145,27 @@ export class StripeService {
    * Handle successful checkout session
    */
   private async handleCheckoutSessionCompleted(session: any) {
-    const { userId, planId, planKey } = session.metadata;
+    const metadata = session.metadata ?? {};
+    let userId = metadata.userId as string | undefined;
+    let planId = metadata.planId as string | undefined;
+    let planKey = metadata.planKey as string | undefined;
     const stripeSubscriptionId = typeof session.subscription === 'string' ? session.subscription : null;
 
     if (!userId || !planId) {
-      logger.warn({ sessionId: session.id }, 'Checkout session metadata missing userId/planId');
-      return null;
+      const resolvedCheckout = await this.resolveCheckoutSessionWithoutMetadata(session);
+      if (!resolvedCheckout) {
+        logger.warn({ sessionId: session.id }, 'Checkout session metadata missing userId/planId and fallback resolution failed');
+        return null;
+      }
+
+      userId = resolvedCheckout.userId;
+      planId = resolvedCheckout.planId;
+      planKey = resolvedCheckout.planKey;
+
+      logger.info(
+        { sessionId: session.id, userId, planKey, source: 'payment-link-fallback' },
+        'Resolved checkout session without metadata'
+      );
     }
 
     try {
@@ -208,6 +223,93 @@ export class StripeService {
     } catch (error) {
       logger.error({ error, userId, planKey }, 'Failed to activate subscription from Stripe checkout');
       throw error;
+    }
+  }
+
+  private async resolveCheckoutSessionWithoutMetadata(
+    session: any,
+  ): Promise<{ userId: string; planId: string; planKey: string } | null> {
+    const email =
+      (session?.customer_details?.email as string | undefined) ??
+      (session?.customer_email as string | undefined) ??
+      null;
+
+    if (!email) {
+      return null;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      logger.warn({ sessionId: session?.id, email }, 'Stripe checkout email does not match any user');
+      return null;
+    }
+
+    const stripePriceId = await this.extractStripePriceIdFromSession(session);
+    if (!stripePriceId) {
+      logger.warn({ sessionId: session?.id, email }, 'Unable to resolve Stripe price ID from checkout session');
+      return null;
+    }
+
+    const mappedPlanKey = getPlanKeyFromStripePrice(stripePriceId);
+    const candidatePlanKeys = mappedPlanKey
+      ? Array.from(new Set([mappedPlanKey, normalizePlanKeyForCheckout(mappedPlanKey)]))
+      : [];
+
+    let plan = await prisma.plan.findFirst({
+      where: {
+        isActive: true,
+        OR: [
+          { stripePriceId },
+          ...(candidatePlanKeys.length > 0 ? [{ key: { in: candidatePlanKeys } }] : []),
+        ],
+      },
+      select: { id: true, key: true },
+    });
+
+    if (!plan && mappedPlanKey) {
+      const normalizedPlanKey = normalizePlanKeyForCheckout(mappedPlanKey);
+      plan = await this.resolveCheckoutPlan(normalizedPlanKey, mappedPlanKey);
+    }
+
+    if (!plan) {
+      logger.warn(
+        { sessionId: session?.id, email, stripePriceId, mappedPlanKey },
+        'Could not resolve plan from Stripe checkout session'
+      );
+      return null;
+    }
+
+    return {
+      userId: user.id,
+      planId: plan.id,
+      planKey: plan.key,
+    };
+  }
+
+  private async extractStripePriceIdFromSession(session: any): Promise<string | null> {
+    const lineItems = session?.line_items?.data;
+    if (Array.isArray(lineItems) && lineItems.length > 0) {
+      const priceId = lineItems[0]?.price?.id;
+      if (typeof priceId === 'string' && priceId.length > 0) {
+        return priceId;
+      }
+    }
+
+    if (!this.stripe || !session?.id) {
+      return null;
+    }
+
+    try {
+      const fetchedLineItems = await this.stripe.checkout.sessions.listLineItems(session.id, { limit: 1 });
+      const fetchedPriceId = fetchedLineItems?.data?.[0]?.price?.id;
+      return typeof fetchedPriceId === 'string' && fetchedPriceId.length > 0 ? fetchedPriceId : null;
+    } catch (error) {
+      logger.warn({ err: error, sessionId: session?.id }, 'Failed to fetch Stripe checkout line items');
+      return null;
     }
   }
 
