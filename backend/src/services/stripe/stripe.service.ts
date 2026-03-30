@@ -453,6 +453,28 @@ export class StripeService {
     }
   }
 
+  async scheduleCancellationAtPeriodEnd(stripeSubscriptionId: string): Promise<{ currentPeriodEnd: Date | null }> {
+    if (!this.stripe) {
+      throw new AppError(503, 'STRIPE_NOT_CONFIGURED', 'Payment processing is temporarily unavailable');
+    }
+
+    try {
+      const updated = await this.stripe.subscriptions.update(stripeSubscriptionId, {
+        cancel_at_period_end: true,
+      });
+
+      const currentPeriodEnd = updated.current_period_end
+        ? new Date(updated.current_period_end * 1000)
+        : null;
+
+      logger.info({ stripeSubscriptionId, currentPeriodEnd }, 'Stripe subscription set to cancel at period end');
+      return { currentPeriodEnd };
+    } catch (error) {
+      logger.error({ error, stripeSubscriptionId }, 'Failed to schedule Stripe cancellation at period end');
+      throw new AppError(502, 'STRIPE_CANCELLATION_FAILED', 'Unable to schedule Stripe subscription cancellation');
+    }
+  }
+
   private mapStripeSubscriptionStatus(status: string): 'ACTIVE' | 'INACTIVE' | 'CANCELED' | 'EXPIRED' {
     switch (status) {
       case 'active':

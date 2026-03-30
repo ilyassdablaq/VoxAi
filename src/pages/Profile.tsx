@@ -57,8 +57,8 @@ export default function Profile() {
       await refreshSubscription();
       setConfirmCancelPlan(false);
       toast({
-        title: "Subscription canceled",
-        description: "Your account has been moved back to the Free plan.",
+        title: "Cancellation scheduled",
+        description: "Your paid plan remains active until the current billing period ends.",
       });
       navigate("/dashboard/subscriptions");
     },
@@ -145,9 +145,9 @@ export default function Profile() {
       <AlertDialog open={confirmCancelPlan} onOpenChange={setConfirmCancelPlan}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Subscription cancel and downgrade?</AlertDialogTitle>
+            <AlertDialogTitle>Cancel at period end?</AlertDialogTitle>
             <AlertDialogDescription>
-              Your paid plan will be canceled and your account will return to the Free plan. Paid features and higher limits may stop immediately.
+              Your paid subscription will stay active until the current billing period ends, then your account will move to the Free plan automatically.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -156,7 +156,7 @@ export default function Profile() {
               disabled={cancelPlanMutation.isPending}
               onClick={() => cancelPlanMutation.mutate()}
             >
-              {cancelPlanMutation.isPending ? "Cancelling..." : "Cancel and switch to Free"}
+              {cancelPlanMutation.isPending ? "Scheduling..." : "Confirm cancellation"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

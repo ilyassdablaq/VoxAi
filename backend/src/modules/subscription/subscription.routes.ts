@@ -7,6 +7,7 @@ import { AppError } from "../../common/errors/app-error.js";
 import { PlanService } from "../plan/plan.service.js";
 import { PlanRepository } from "../plan/plan.repository.js";
 import { env } from "../../config/env.js";
+import { normalizePlanKeyForCheckout } from "../../config/plan-stripe-mapping.js";
 
 function resolveCheckoutBaseOrigin(originHeader: string | undefined): string {
   if (!originHeader) {
@@ -65,23 +66,24 @@ export async function subscriptionRoutes(fastify: FastifyInstance): Promise<void
         throw new AppError(400, 'INVALID_INPUT', 'planKey is required');
       }
 
+      const normalizedPlanKey = normalizePlanKeyForCheckout(planKey);
+
+      if (normalizedPlanKey === 'free') {
+        await planService.changePlan(user.sub, 'free');
+        return reply.status(200).send({
+          sessionId: 'free-plan',
+          url: null,
+          mode: 'direct',
+        });
+      }
+
       try {
         const { sessionId, url } = await stripeService.createCheckoutSession(user.sub, planKey, {
-          successUrl: `${baseOrigin}/stripe-success`,
-          cancelUrl: `${baseOrigin}/stripe-cancel`,
+          successUrl: `${baseOrigin}/dashboard?payment=success`,
+          cancelUrl: `${baseOrigin}/dashboard/subscriptions?payment=cancelled`,
         });
-        return reply.status(200).send({ sessionId, url });
+        return reply.status(200).send({ sessionId, url, mode: 'checkout' });
       } catch (error) {
-        if (
-          env.NODE_ENV !== "production" &&
-          error instanceof AppError &&
-          (error.code === "STRIPE_NOT_CONFIGURED" || error.code === "PLAN_NOT_AVAILABLE")
-        ) {
-          await planService.changePlan(user.sub, planKey);
-          const successUrl = `${baseOrigin}/stripe-success?mode=dev-upgrade`;
-          return reply.status(200).send({ sessionId: "dev-upgrade", url: successUrl });
-        }
-
         throw error;
       }
     }
@@ -93,7 +95,7 @@ export async function subscriptionRoutes(fastify: FastifyInstance): Promise<void
     { preHandler: [authenticate] },
     async (request) => {
       const user = request.user as { sub: string };
-      return service.cancelAndDowngradeToFree(user.sub);
+      return service.cancelAtPeriodEnd(user.sub);
     }
   );
 

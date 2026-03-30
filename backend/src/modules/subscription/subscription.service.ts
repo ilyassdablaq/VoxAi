@@ -10,7 +10,19 @@ export class SubscriptionService {
 
   private readonly planService = new PlanService(new PlanRepository());
 
+  private async expireEndedSubscriptions(userId: string) {
+    await prisma.subscription.updateMany({
+      where: {
+        userId,
+        status: 'ACTIVE',
+        endsAt: { lt: new Date() },
+      },
+      data: { status: 'EXPIRED' },
+    });
+  }
+
   async getCurrentSubscription(userId: string) {
+    await this.expireEndedSubscriptions(userId);
     await this.repository.ensureDefaultFreePlanSubscription(userId);
     const subscription = await this.repository.getCurrentSubscriptionWithPlan(userId);
     if (!subscription) {
@@ -23,7 +35,8 @@ export class SubscriptionService {
     return this.repository.getAvailablePlans();
   }
 
-  async cancelAndDowngradeToFree(userId: string) {
+  async cancelAtPeriodEnd(userId: string) {
+    await this.expireEndedSubscriptions(userId);
     await this.repository.ensureDefaultFreePlanSubscription(userId);
 
     const currentSubscription = await this.repository.getCurrentSubscriptionWithPlan(userId);
@@ -36,9 +49,20 @@ export class SubscriptionService {
     }
 
     if (currentSubscription.stripeSubscriptionId) {
-      await stripeService.cancelSubscriptionById(currentSubscription.stripeSubscriptionId);
+      const cancellation = await stripeService.scheduleCancellationAtPeriodEnd(currentSubscription.stripeSubscriptionId);
+
+      await prisma.subscription.update({
+        where: { id: currentSubscription.id },
+        data: {
+          status: 'ACTIVE',
+          endsAt: cancellation.currentPeriodEnd,
+        },
+      });
+
+      return this.getCurrentSubscription(userId);
     }
 
+    // Non-Stripe subscriptions can be downgraded immediately.
     await this.planService.changePlan(userId, 'free');
     return this.getCurrentSubscription(userId);
   }

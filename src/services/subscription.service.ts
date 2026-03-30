@@ -33,6 +33,12 @@ export interface CheckoutCapabilities {
   paymentMethods: PaymentMethodOption[];
 }
 
+export interface UpgradeResponse {
+  sessionId: string;
+  url: string | null;
+  mode?: "checkout" | "direct";
+}
+
 export const subscriptionService = {
   listPlans(): Promise<Plan[]> {
     return apiClient.get<Plan[]>("/api/plans");
@@ -58,11 +64,10 @@ export const subscriptionService = {
     return apiClient.post<CurrentSubscription>("/api/subscriptions/cancel", {});
   },
 
-  async startUpgrade(planKey: string): Promise<string> {
-    const response = await apiClient.post<{ sessionId: string; url: string }>(
+  async startUpgrade(planKey: string): Promise<UpgradeResponse> {
+    return apiClient.post<UpgradeResponse>(
       "/api/subscriptions/upgrade",
       { planKey }
     );
-    return response.url;
   },
 };

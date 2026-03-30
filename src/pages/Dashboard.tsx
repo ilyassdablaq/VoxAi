@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [newTitle, setNewTitle] = useState("");
@@ -32,6 +33,23 @@ const Dashboard = () => {
   const [renameConversationId, setRenameConversationId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ConversationSummary | null>(null);
+
+  useEffect(() => {
+    const paymentState = searchParams.get("payment");
+    if (!paymentState) {
+      return;
+    }
+
+    if (paymentState === "success") {
+      toast({
+        title: "Plan upgraded successfully",
+        description: "Your paid subscription is now active.",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["current-subscription"] });
+    }
+
+    navigate("/dashboard", { replace: true });
+  }, [searchParams, toast, navigate, queryClient]);
 
   const { data: conversations = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["conversations"],

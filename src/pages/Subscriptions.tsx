@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Check, CreditCard, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,7 @@ function normalizeFeatures(features: unknown): string[] {
 
 export default function Subscriptions() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { subscription } = useAuth();
@@ -113,10 +114,45 @@ export default function Subscriptions() {
 
   const currentPlanKey = currentSubscription?.plan?.key;
 
+  useEffect(() => {
+    const paymentState = searchParams.get("payment");
+    if (!paymentState) {
+      return;
+    }
+
+    if (paymentState === "cancelled") {
+      toast({
+        title: "Checkout canceled",
+        description: "No payment was made. Your current plan is unchanged.",
+      });
+    }
+
+    navigate("/dashboard/subscriptions", { replace: true });
+  }, [searchParams, toast, navigate]);
+
   const upgradeMutation = useMutation({
     mutationFn: (planKey: string) => subscriptionService.startUpgrade(planKey),
-    onSuccess: (checkoutUrl) => {
-      window.location.href = checkoutUrl;
+    onSuccess: async (result, planKey) => {
+      if (planKey === "free" || result.mode === "direct") {
+        await queryClient.invalidateQueries({ queryKey: ["current-subscription"] });
+        await queryClient.invalidateQueries({ queryKey: ["plans"] });
+        toast({
+          title: "Plan updated",
+          description: "Your account is now on the Free plan.",
+        });
+        return;
+      }
+
+      if (result.url) {
+        window.location.href = result.url;
+        return;
+      }
+
+      toast({
+        title: "Upgrade failed",
+        description: "Checkout URL could not be created.",
+        variant: "destructive",
+      });
     },
     onError: (error) => {
       toast({
