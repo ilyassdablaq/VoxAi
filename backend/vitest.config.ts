@@ -19,13 +19,6 @@ export default defineConfig({
         "src/**/*.d.ts",
       ],
     },
-    deps: {
-      optimizer: {
-        web: {
-          include: ["@prisma/client"],
-        },
-      },
-    },
   },
   resolve: {
     alias: {
