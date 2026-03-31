@@ -35,7 +35,7 @@ const plans = [
     price: "EUR 0",
     period: "forever",
     desc: "Perfect for testing and prototyping.",
-    features: ["100 voice minutes/month", "Basic NLU", "1 voice agent", "Community support", "API access"],
+    features: ["30 voice minutes/month", "20,000 AI tokens/month", "Basic NLU", "1 voice agent", "Community support", "API access"],
     cta: "Get Started",
     highlighted: false,
   },
