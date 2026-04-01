@@ -103,7 +103,7 @@ export async function subscriptionRoutes(fastify: FastifyInstance): Promise<void
         scope: `subscription:${user.sub}:upgrade`,
         key: idempotencyKey,
         run: async () => {
-          const { sessionId, url } = await stripeService.createCheckoutSession(user.sub, planKey, {
+          const { sessionId, url } = await stripeService.createCheckoutSession(user.sub, normalizedPlanKey, {
             successUrl: `${baseOrigin}/dashboard?payment=success`,
             cancelUrl: `${baseOrigin}/dashboard/subscriptions?payment=cancelled`,
           });
