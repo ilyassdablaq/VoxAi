@@ -3,6 +3,7 @@ import { ConversationRepository } from "../conversation/conversation.repository.
 import { AiOrchestratorService } from "../../services/ai/ai-orchestrator.service.js";
 import { IntegrationRepository } from "./integration.repository.js";
 import { EmbedChatInput, IntegrationSettingsInput } from "./integration.schemas.js";
+import { assertTenantAccess } from "../../common/services/tenant-guard.service.js";
 
 export class IntegrationService {
   constructor(
@@ -32,7 +33,13 @@ export class IntegrationService {
     let conversationId = payload.conversationId;
     if (conversationId) {
       const conversation = await this.conversationRepository.getConversationById(conversationId);
-      if (!conversation || conversation.userId !== integration.userId) {
+      if (!conversation) {
+        throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation not found");
+      }
+
+      try {
+        assertTenantAccess(conversation.userId, integration.userId, "conversation");
+      } catch {
         throw new AppError(403, "FORBIDDEN", "Conversation does not belong to this embed key");
       }
     } else {

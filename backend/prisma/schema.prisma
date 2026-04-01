@@ -58,6 +58,16 @@ model User {
   subscriptions            Subscription[]
   usageRecords             Usage[]
   apiKeys                  APIKey[]
+  sloMetrics               SloMetric[]
+  spendCap                 SpendCap?
+  retentionPolicies        RetentionPolicy[]
+  apiKeysV2                ApiKeyV2[]
+  leakedApiKeys            LeakedApiKey[]
+  webhookEvents            WebhookEvent[]
+  webhookDeliveries        WebhookDelivery[]
+  createdGoldenTests       GoldenTestSet[]
+  releaseGatesOverride     ReleaseGate[]
+  dataDeletionQueue        DataDeletionQueue[]
 
   @@index([createdAt])
 }
@@ -202,4 +212,275 @@ model KnowledgeChunk {
   document    KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@index([documentId])
+}
+
+model EmailDeliveryStatus {
+  id                String   @id @default(uuid())
+  provider          String   @default("resend")
+  providerMessageId String
+  recipientEmail    String?
+  subject           String?
+  status            String
+  eventType         String
+  eventTimestamp    DateTime
+  rawPayload        Json?
+  attemptCount      Int      @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([provider, providerMessageId])
+  @@index([recipientEmail, eventTimestamp])
+  @@index([status, eventTimestamp])
+}
+
+model OutboxEvent {
+  id             String   @id @default(uuid())
+  aggregateId    String
+  aggregateType  String
+  eventType      String
+  payload        Json
+  isPublished    Boolean  @default(false)
+  publishedAt    DateTime?
+  failureCount   Int      @default(0)
+  lastError      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isPublished, createdAt])
+  @@index([aggregateType, aggregateId])
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  userId         String?
+  principalType  String   // "user" | "api_key" | "system"
+  principalId    String   // user.id or apiKey.id
+  action         String   // "subscription.upgrade", "admin.user.delete", etc.
+  resourceType   String   // "subscription", "user", "webhook", etc.
+  resourceId     String
+  changes        Json?    // what changed: { before, after }
+  status         String   @default("success") // "success" | "failure"
+  errorMessage   String?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([principalType, principalId])
+}
+
+// SLO & Error Budgets
+model SloMetric {
+  id                      String   @id @default(uuid())
+  metricName              String
+  tenantId                String?
+  sloTarget               Decimal
+  currentValue            Decimal
+  errorBudgetRemaining    Decimal
+  burnRate                Decimal
+  windowStartAt           DateTime
+  windowEndAt             DateTime
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  user                    User?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([metricName])
+}
+
+// Billing Safety: Spend Caps
+model SpendCap {
+  id                      String   @id @default(uuid())
+  tenantId                String   @unique
+  plan                    String
+  monthlyBudgetCents      BigInt
+  currentMonthSpendCents  BigInt   @default(0)
+  warningThresholdPercent Int      @default(80)
+  hardLimitEnabled        Boolean  @default(true)
+  gracePeriodDays         Int      @default(3)
+  lastResetAt             DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  user                    User     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+// Data Lifecycle: Retention Policies
+model RetentionPolicy {
+  id                      String   @id @default(uuid())
+  tenantId                String
+  dataType                String   // 'logs', 'messages', 'embeddings', 'conversations'
+  retentionDays           Int
+  autoArchiveEnabled      Boolean  @default(false)
+  archiveLocation         String?
+  gdprCompliant           Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  user                    User     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([dataType])
+}
+
+// API Key Security: Scoped Keys with Rotation
+model ApiKeyV2 {
+  id                      String   @id @default(uuid())
+  tenantId                String
+  keyPrefix               String   // 'sk_live_', 'sk_test_'
+  keyHash                 String   @unique
+  scopes                  String   // comma-separated: read, write, admin
+  lastUsedAt              DateTime?
+  lastUsedIp              String?
+  lastRotatedAt           DateTime?
+  nextRotationRequiredAt  DateTime?
+  rotationInProgress      Boolean  @default(false)
+  name                    String?
+  active                  Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  user                    User     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leakedKeys              LeakedApiKey[]
+
+  @@index([tenantId])
+  @@index([keyHash])
+  @@index([keyPrefix])
+}
+
+// API Key Leak Detection
+model LeakedApiKey {
+  id                      String   @id @default(uuid())
+  apiKeyId                String
+  tenantId                String
+  detectionSource         String   // 'scanner', 'user_report', 'github_scanning'
+  detectedAt              DateTime
+  location                String?
+  severity                String   // 'low', 'medium', 'high'
+  actionTaken             String   // 'revoked', 'notified', 'investigating'
+  createdAt               DateTime @default(now())
+  apiKey                  ApiKeyV2 @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  user                    User     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([apiKeyId])
+}
+
+// Webhook Event Store for Replay
+model WebhookEvent {
+  id                      String   @id @default(uuid())
+  tenantId                String
+  eventType               String   // 'conversation.created', 'message.received', etc
+  payload                 Json
+  signatureVersion        Int      @default(1)
+  deliveryAttempts        Int      @default(0)
+  lastDeliveryAttemptAt   DateTime?
+  lastDeliveryStatus      String?  // 'success', 'failed', 'pending'
+  deliveredAt             DateTime?
+  replayCount             Int      @default(0)
+  createdAt               DateTime @default(now())
+  user                    User     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deliveries              WebhookDelivery[]
+
+  @@index([tenantId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// Webhook Delivery History
+model WebhookDelivery {
+  id                      String   @id @default(uuid())
+  webhookEventId          String
+  tenantId                String
+  endpointUrl             String
+  httpStatus              Int?
+  responseTimeMs          Int?
+  errorMessage            String?
+  deliveredAt             DateTime?
+  retryCount              Int      @default(0)
+  createdAt               DateTime @default(now())
+  webhookEvent            WebhookEvent @relation(fields: [webhookEventId], references: [id], onDelete: Cascade)
+  user                    User     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([webhookEventId])
+  @@index([tenantId])
+}
+
+// AI Regression Testing: Golden Test Sets
+model GoldenTestSet {
+  id                      String   @id @default(uuid())
+  name                    String
+  description             String?
+  version                 Int      @default(1)
+  inputText               String
+  expectedOutput          String
+  metadata                Json?    // tags, category, model_version, etc
+  createdBy               String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  user                    User?    @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  evaluations             OfflineEvaluation[]
+
+  @@index([name])
+  @@index([version])
+}
+
+// Offline Evaluations for Model/Prompt Changes
+model OfflineEvaluation {
+  id                      String   @id @default(uuid())
+  goldenTestSetId         String
+  modelName               String
+  promptVersion           Int
+  chunkingStrategy        String?
+  actualOutput            String
+  similarityScore         Decimal?
+  qualityScore            Decimal?
+  latencyMs               Int?
+  tokensUsed              Int?
+  evaluationStatus        String   // 'passed', 'failed', 'degraded'
+  releaseGateResult       String?  // 'approved', 'blocked', 'manual_review'
+  evaluatedAt             DateTime
+  createdAt               DateTime @default(now())
+  goldenTestSet           GoldenTestSet @relation(fields: [goldenTestSetId], references: [id], onDelete: Cascade)
+
+  @@index([modelName])
+  @@index([evaluationStatus])
+  @@index([releaseGateResult])
+}
+
+// Release Gate Configuration
+model ReleaseGate {
+  id                      String   @id @default(uuid())
+  gateName                String   @unique
+  minSimilarityScore      Decimal  @default(0.85)
+  minQualityScore         Decimal  @default(0.80)
+  maxLatencyMs            Int      @default(3000)
+  tokenEfficiencyTarget   Decimal  @default(0.95)
+  overrideAdminId         String?
+  overrideReason          String?
+  overrideUntil           DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  admin                   User?    @relation(fields: [overrideAdminId], references: [id], onDelete: SetNull)
+
+  @@index([gateName])
+}
+
+// Data Deletion Queue for GDPR
+model DataDeletionQueue {
+  id                      String   @id @default(uuid())
+  tenantId                String
+  dataType                String   // 'user', 'messages', 'logs', 'embeddings'
+  entityId                String?
+  scheduledAt             DateTime
+  processingStartedAt     DateTime?
+  completedAt             DateTime?
+  status                  String   @default("pending") // 'pending', 'processing', 'completed', 'failed'
+  errorMessage            String?
+  createdAt               DateTime @default(now())
+  user                    User     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
 }

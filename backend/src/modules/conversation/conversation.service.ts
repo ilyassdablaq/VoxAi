@@ -3,7 +3,9 @@ import { AiOrchestratorService } from "../../services/ai/ai-orchestrator.service
 import { UsageService } from "../billing/usage.service.js";
 import { ConversationRepository } from "./conversation.repository.js";
 import { CreateConversationInput, UpdateConversationInput } from "./conversation.schemas.js";
-import { aiTasksQueue, transcriptionQueue, webhookQueue } from "../../infra/queue/queues.js";
+import { aiTasksQueue, enqueueWithPolicy, transcriptionQueue } from "../../infra/queue/queues.js";
+import { publishDomainEvent } from "../../common/services/outbox.service.js";
+import { assertTenantAccess } from "../../common/services/tenant-guard.service.js";
 
 export class ConversationService {
   constructor(
@@ -55,15 +57,20 @@ export class ConversationService {
         tokensUsed: ai.tokenCount,
       });
 
-      await aiTasksQueue.add("conversation-initial-response", {
+      await enqueueWithPolicy(aiTasksQueue, "conversation-initial-response", {
         conversationId: conversation.id,
         userId,
       });
-      await webhookQueue.add("conversation-started", {
-        conversationId: conversation.id,
+      await publishDomainEvent({
+        eventId: `conversation-started:${conversation.id}`,
+        eventType: "conversation.started",
+        aggregateId: conversation.id,
         userId,
+        payload: {
+          conversationId: conversation.id,
+        },
       });
-      await transcriptionQueue.add("transcription-audit", {
+      await enqueueWithPolicy(transcriptionQueue, "transcription-audit", {
         conversationId: conversation.id,
       });
     }
@@ -77,9 +84,7 @@ export class ConversationService {
       throw new AppError(404, "CONVERSATION_NOT_FOUND", "Conversation not found");
     }
 
-    if (conversation.userId !== userId) {
-      throw new AppError(403, "FORBIDDEN", "You cannot access this conversation");
-    }
+    assertTenantAccess(conversation.userId, userId, "conversation");
 
     return this.repository.getMessages(conversationId);
   }

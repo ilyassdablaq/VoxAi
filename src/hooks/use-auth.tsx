@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import { authService } from "@/services/auth.service";
 import { subscriptionService } from "@/services/subscription.service";
+import { identifyUser, resetUserIdentity } from "@/lib/product-analytics";
 
 export interface Subscription {
   id: string;
@@ -73,6 +74,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fullName: profile.fullName,
           role: profile.role,
         });
+        identifyUser(profile.id, {
+          email: profile.email,
+          role: profile.role,
+        });
 
         try {
           const sub = await subscriptionService.getCurrentSubscription();
@@ -98,6 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authService.login(email, password);
       setUser(response.user);
+      identifyUser(response.user.id, {
+        email: response.user.email,
+        role: response.user.role,
+      });
       authService.setTokens(response.accessToken, response.refreshToken, rememberMe);
 
       try {
@@ -119,6 +128,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authService.register(email, password, fullName);
       setUser(response.user);
+      identifyUser(response.user.id, {
+        email: response.user.email,
+        role: response.user.role,
+      });
       authService.setTokens(response.accessToken, response.refreshToken);
 
       try {
@@ -135,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSubscription(null);
     authService.clearTokens();
+    resetUserIdentity();
   };
 
   const refreshSubscription = async () => {

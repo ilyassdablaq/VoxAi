@@ -8,6 +8,7 @@ import { PlanService } from "../plan/plan.service.js";
 import { PlanRepository } from "../plan/plan.repository.js";
 import { env } from "../../config/env.js";
 import { normalizePlanKeyForCheckout } from "../../config/plan-stripe-mapping.js";
+import { idempotencyService } from "../../common/services/idempotency.service.js";
 
 function resolveCheckoutBaseOrigin(originHeader: string | undefined): string {
   if (!originHeader) {
@@ -69,23 +70,52 @@ export async function subscriptionRoutes(fastify: FastifyInstance): Promise<void
       const normalizedPlanKey = normalizePlanKeyForCheckout(planKey);
 
       if (normalizedPlanKey === 'free') {
-        await planService.changePlan(user.sub, 'free');
-        return reply.status(200).send({
-          sessionId: 'free-plan',
-          url: null,
-          mode: 'direct',
+        const idempotencyKey = idempotencyService.resolveKey(
+          typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : undefined,
+          ["subscription", "upgrade", user.sub, normalizedPlanKey],
+        );
+
+        const result = await idempotencyService.execute({
+          scope: `subscription:${user.sub}:upgrade`,
+          key: idempotencyKey,
+          run: async () => {
+            await planService.changePlan(user.sub, 'free');
+            return {
+              statusCode: 200,
+              body: {
+                sessionId: 'free-plan',
+                url: null,
+                mode: 'direct',
+              },
+            };
+          },
         });
+
+        return reply.status(result.statusCode).send(result.body);
       }
 
-      try {
-        const { sessionId, url } = await stripeService.createCheckoutSession(user.sub, planKey, {
-          successUrl: `${baseOrigin}/dashboard?payment=success`,
-          cancelUrl: `${baseOrigin}/dashboard/subscriptions?payment=cancelled`,
-        });
-        return reply.status(200).send({ sessionId, url, mode: 'checkout' });
-      } catch (error) {
-        throw error;
-      }
+      const idempotencyKey = idempotencyService.resolveKey(
+        typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : undefined,
+        ["subscription", "upgrade", user.sub, normalizedPlanKey],
+      );
+
+      const result = await idempotencyService.execute({
+        scope: `subscription:${user.sub}:upgrade`,
+        key: idempotencyKey,
+        run: async () => {
+          const { sessionId, url } = await stripeService.createCheckoutSession(user.sub, planKey, {
+            successUrl: `${baseOrigin}/dashboard?payment=success`,
+            cancelUrl: `${baseOrigin}/dashboard/subscriptions?payment=cancelled`,
+          });
+
+          return {
+            statusCode: 200,
+            body: { sessionId, url, mode: 'checkout' },
+          };
+        },
+      });
+
+      return reply.status(result.statusCode).send(result.body);
     }
   );
 
@@ -93,9 +123,27 @@ export async function subscriptionRoutes(fastify: FastifyInstance): Promise<void
   fastify.post(
     "/api/subscriptions/cancel",
     { preHandler: [authenticate] },
-    async (request) => {
+    async (request, reply) => {
       const user = request.user as { sub: string };
-      return service.cancelAtPeriodEnd(user.sub);
+
+      const idempotencyKey = idempotencyService.resolveKey(
+        typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : undefined,
+        ["subscription", "cancel", user.sub],
+      );
+
+      const result = await idempotencyService.execute({
+        scope: `subscription:${user.sub}:cancel`,
+        key: idempotencyKey,
+        run: async () => {
+          const body = await service.cancelAtPeriodEnd(user.sub);
+          return {
+            statusCode: 200,
+            body,
+          };
+        },
+      });
+
+      return reply.status(result.statusCode).send(result.body);
     }
   );
 
@@ -121,9 +169,21 @@ export async function subscriptionRoutes(fastify: FastifyInstance): Promise<void
 
       // Parse and handle event
       const event = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
-      await stripeService.handleWebhookEvent(event);
+      const eventId = typeof event?.id === "string" ? event.id : `stripe:${bodyString.slice(0, 128)}`;
 
-      return reply.status(200).send({ received: true });
+      const result = await idempotencyService.execute({
+        scope: "webhook:stripe",
+        key: eventId,
+        run: async () => {
+          await stripeService.handleWebhookEvent(event);
+          return {
+            statusCode: 200,
+            body: { received: true },
+          };
+        },
+      });
+
+      return reply.status(result.statusCode).send(result.body);
     }
   );
 }

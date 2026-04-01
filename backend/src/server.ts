@@ -1,11 +1,24 @@
 import { buildApp } from "./app.js";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
+import { initializeSentry, Sentry } from "./config/sentry.js";
 import { connectDatabase, disconnectDatabase } from "./infra/database/prisma.js";
 import { startWorkers } from "./infra/queue/queues.js";
 import { redis, redisPublisher, redisSubscriber } from "./infra/cache/redis.js";
 
 async function bootstrap() {
+  initializeSentry();
+
+  process.on("unhandledRejection", (reason) => {
+    Sentry.captureException(reason);
+    logger.error({ err: reason }, "Unhandled promise rejection");
+  });
+
+  process.on("uncaughtException", (error) => {
+    Sentry.captureException(error);
+    logger.error({ err: error }, "Uncaught exception");
+  });
+
   await connectDatabase();
   const app = await buildApp();
   const workers = startWorkers();
@@ -16,6 +29,7 @@ async function bootstrap() {
     await Promise.all(workers.map((worker) => worker.close()));
     await disconnectDatabase();
     await Promise.all([redis.quit(), redisPublisher.quit(), redisSubscriber.quit()]);
+    await Sentry.close(2000);
     process.exit(0);
   };
 
@@ -30,6 +44,7 @@ async function bootstrap() {
 
     logger.info({ host: env.HOST, port: env.PORT }, "VoxAI backend is running");
   } catch (error) {
+    Sentry.captureException(error);
     logger.error({ error }, "Failed to start server");
     await closeGracefully();
   }
