@@ -137,7 +137,11 @@ describe("UpgradeModal", () => {
     const checkoutUrl = "https://checkout.stripe.com/pay/session123";
 
     vi.mocked(subscriptionService.listPlans).mockResolvedValue(mockPlans);
-    vi.mocked(subscriptionService.startUpgrade).mockResolvedValue(checkoutUrl);
+    vi.mocked(subscriptionService.startUpgrade).mockResolvedValue({
+      sessionId: "session123",
+      url: checkoutUrl,
+      mode: "checkout",
+    });
 
     // Mock window.location.href
     const originalLocation = window.location;
@@ -220,7 +224,11 @@ describe("UpgradeModal", () => {
     ];
 
     vi.mocked(subscriptionService.listPlans).mockResolvedValue(mockPlans);
-    vi.mocked(subscriptionService.startUpgrade).mockResolvedValue("https://checkout");
+    vi.mocked(subscriptionService.startUpgrade).mockResolvedValue({
+      sessionId: "session123",
+      url: "https://checkout",
+      mode: "checkout",
+    });
 
     delete (window as any).location;
     window.location = { href: "" } as any;
