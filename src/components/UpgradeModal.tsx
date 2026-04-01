@@ -55,10 +55,14 @@ export function UpgradeModal({
         })[0];
 
       const targetPlanKey = targetPlan?.key ?? (requiredPlan === 'ENTERPRISE' ? 'enterprise' : 'pro');
-      const redirectUrl = await subscriptionService.startUpgrade(targetPlanKey);
-      if (redirectUrl) {
-        window.location.href = redirectUrl;
+      const upgrade = await subscriptionService.startUpgrade(targetPlanKey);
+      if (upgrade.url) {
+        window.location.href = upgrade.url;
+        return;
       }
+
+      navigate('/dashboard/subscriptions');
+      closeModal();
     } catch (error) {
       console.error('Upgrade failed:', error);
       navigate('/dashboard/subscriptions');

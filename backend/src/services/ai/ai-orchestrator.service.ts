@@ -40,6 +40,17 @@ function buildLanguageInstructions(language: string): string {
   return `Respond primarily in ${normalized}. Match the user's language when detected and keep tone natural. Provide complete, useful answers (typically 3-6 sentences unless user asks for brevity).`;
 }
 
+function buildTemporalInstructions(): string {
+  const now = new Date();
+  const isoDate = now.toISOString().slice(0, 10);
+  const isoTimestamp = now.toISOString();
+  return [
+    `Current date (ISO): ${isoDate}.`,
+    `Current timestamp (UTC): ${isoTimestamp}.`,
+    "When the user asks about today's date/time, use this runtime date context and do not guess.",
+  ].join(" ");
+}
+
 export class AiOrchestratorService {
   private readonly providers: ProviderSet;
   private readonly voiceRepository: VoiceRepository;
@@ -76,7 +87,11 @@ export class AiOrchestratorService {
           },
         ];
 
-    const llmResult = await this.generateText(`${ragContext}\n\n${buildLanguageInstructions(input.language)}`, llmMessages, llmOptions);
+    const llmResult = await this.generateText(
+      `${ragContext}\n\n${buildLanguageInstructions(input.language)}\n\n${buildTemporalInstructions()}`,
+      llmMessages,
+      llmOptions,
+    );
     const safeResponseText = applyOutputGuardrails(llmResult.text);
 
     const ttsResult = await this.speak(input.userId, safeResponseText, input.language);
@@ -120,7 +135,11 @@ export class AiOrchestratorService {
           },
         ];
 
-    const llmResult = await this.generateText(`${ragContext}\n\n${buildLanguageInstructions(input.language)}`, llmMessages, llmOptions);
+    const llmResult = await this.generateText(
+      `${ragContext}\n\n${buildLanguageInstructions(input.language)}\n\n${buildTemporalInstructions()}`,
+      llmMessages,
+      llmOptions,
+    );
     const safeResponseText = applyOutputGuardrails(llmResult.text);
 
     const ttsResult = await this.speak(input.userId, safeResponseText, input.language);
@@ -167,7 +186,7 @@ export class AiOrchestratorService {
         ];
 
     const llmResult = await this.streamGenerateText(
-      `${ragContext}\n\n${buildLanguageInstructions(input.language)}`,
+      `${ragContext}\n\n${buildLanguageInstructions(input.language)}\n\n${buildTemporalInstructions()}`,
       llmMessages,
       onToken,
       llmOptions,
