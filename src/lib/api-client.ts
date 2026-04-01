@@ -1,5 +1,6 @@
 import { authService } from "@/services/auth.service";
 import { API_BASE, API_BASE_CANDIDATES } from "@/lib/api-config";
+import { Sentry } from "@/lib/monitoring";
 
 export class ApiError extends Error {
   constructor(
@@ -130,6 +131,17 @@ async function performRequest(path: string, init: RequestInit, retryOnUnauthoriz
   }
 
   if (!response) {
+    Sentry.captureException(lastError instanceof Error ? lastError : new Error("API_UNREACHABLE"), {
+      tags: {
+        scope: "api_client",
+        type: "network",
+      },
+      extra: {
+        path,
+        candidates: baseCandidates,
+      },
+    });
+
     throw new ApiError(
       `Network error while contacting API. Tried: ${baseCandidates.join(", ")}. ${lastError instanceof Error ? lastError.message : ""}`.trim(),
       0,
@@ -157,7 +169,18 @@ async function request<T>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", p
   });
 
   if (!response.ok) {
-    throw await parseErrorResponse(response);
+    const error = await parseErrorResponse(response);
+    Sentry.captureException(error, {
+      tags: {
+        scope: "api_client",
+        statusCode: String(response.status),
+      },
+      extra: {
+        path,
+        code: error.code,
+      },
+    });
+    throw error;
   }
 
   if (response.status === 204) {

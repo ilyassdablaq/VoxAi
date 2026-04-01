@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api-client";
+import { trackEvent } from "@/lib/product-analytics";
 
 export interface Plan {
   id: string;
@@ -56,8 +57,14 @@ export const subscriptionService = {
     return apiClient.get<CurrentSubscription>("/api/subscriptions/current");
   },
 
-  changePlan(planKey: string): Promise<CurrentSubscription> {
-    return apiClient.post<CurrentSubscription>("/api/subscriptions/change", { planKey });
+  async changePlan(planKey: string): Promise<CurrentSubscription> {
+    const result = await apiClient.post<CurrentSubscription>("/api/subscriptions/change", { planKey });
+    trackEvent("plan_upgraded", {
+      planKey,
+      flow: "direct_change",
+      status: result.status,
+    });
+    return result;
   },
 
   cancelToFreePlan(): Promise<CurrentSubscription> {
@@ -65,9 +72,22 @@ export const subscriptionService = {
   },
 
   async startUpgrade(planKey: string): Promise<UpgradeResponse> {
-    return apiClient.post<UpgradeResponse>(
+    trackEvent("plan_upgrade_started", {
+      planKey,
+    });
+
+    const result = await apiClient.post<UpgradeResponse>(
       "/api/subscriptions/upgrade",
       { planKey }
     );
+
+    if (result.mode === "direct") {
+      trackEvent("plan_upgraded", {
+        planKey,
+        flow: "direct_upgrade",
+      });
+    }
+
+    return result;
   },
 };

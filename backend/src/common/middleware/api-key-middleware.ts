@@ -24,6 +24,8 @@ export async function authenticateApiKey(request: FastifyRequest, _reply: Fastif
     sub: key.userId,
     email: key.user.email,
     role: key.user.role,
+    type: "api_key",
+    apiKeyId: key.id,
   };
 
   await prisma.aPIKey.update({

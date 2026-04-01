@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { conversationService, ConversationMessage, ConversationSocketEvent } from "@/services/conversation.service";
+import { trackEvent } from "@/lib/product-analytics";
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
 
@@ -365,6 +366,12 @@ export default function ConversationChat() {
         language: selectedLanguage,
       }),
     );
+
+    trackEvent("message_sent", {
+      channel: "chat",
+      language: selectedLanguage,
+      length: content.length,
+    });
   };
 
   const toggleListening = () => {

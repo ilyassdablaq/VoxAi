@@ -1,4 +1,5 @@
 import { API_BASE, API_BASE_CANDIDATES } from "@/lib/api-config";
+import { trackEvent } from "@/lib/product-analytics";
 
 const ACCESS_TOKEN_KEY = "accessToken";
 const REFRESH_TOKEN_KEY = "refreshToken";
@@ -91,7 +92,12 @@ export const authService = {
 
     if (!response.ok) throw await parseAuthError(response, "Registration failed");
 
-    return response.json();
+    const payload = (await response.json()) as AuthResponse;
+    trackEvent("user_registered", {
+      method: "password",
+      role: payload.user.role,
+    });
+    return payload;
   },
 
   async login(email: string, password: string): Promise<AuthResponse> {
@@ -103,7 +109,12 @@ export const authService = {
 
     if (!response.ok) throw await parseAuthError(response, "Login failed");
 
-    return response.json();
+    const payload = (await response.json()) as AuthResponse;
+    trackEvent("user_logged_in", {
+      method: "password",
+      role: payload.user.role,
+    });
+    return payload;
   },
 
   async refreshTokens(): Promise<{ accessToken: string; refreshToken: string }> {

@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api-client";
 import { API_BASE, API_BASE_CANDIDATES } from "@/lib/api-config";
 import { authService } from "@/services/auth.service";
+import { trackEvent } from "@/lib/product-analytics";
 
 export interface ConversationMessage {
   id: string;
@@ -71,12 +72,19 @@ export const conversationService = {
     return apiClient.get<ConversationSummary[]>("/api/conversations");
   },
 
-  createConversation(payload: { title: string; language?: string; initialMessage?: string }): Promise<ConversationSummary> {
-    return apiClient.post<ConversationSummary>("/api/conversations", {
+  async createConversation(payload: { title: string; language?: string; initialMessage?: string }): Promise<ConversationSummary> {
+    const result = await apiClient.post<ConversationSummary>("/api/conversations", {
       title: payload.title,
       language: payload.language ?? "en",
       initialMessage: payload.initialMessage,
     });
+
+    trackEvent("conversation_created", {
+      language: result.language,
+      hasInitialMessage: Boolean(payload.initialMessage),
+    });
+
+    return result;
   },
 
   getMessages(conversationId: string): Promise<ConversationMessage[]> {

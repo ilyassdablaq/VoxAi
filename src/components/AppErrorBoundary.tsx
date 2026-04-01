@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Sentry } from "@/lib/monitoring";
 
 interface AppErrorBoundaryProps {
   children: ReactNode;
@@ -19,6 +20,14 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    Sentry.captureException(error, {
+      tags: {
+        scope: "react_error_boundary",
+      },
+      extra: {
+        componentStack: info.componentStack,
+      },
+    });
     console.error("Unhandled UI error:", error, info);
   }
 

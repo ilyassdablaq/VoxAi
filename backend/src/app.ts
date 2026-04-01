@@ -3,6 +3,7 @@ import sensible from "@fastify/sensible";
 import jwt from "@fastify/jwt";
 import websocket from "@fastify/websocket";
 import multipart from "@fastify/multipart";
+import rawBody from "fastify-raw-body";
 import { env } from "./config/env.js";
 import { registerSecurityPlugins } from "./common/plugins/security.js";
 import { errorHandler } from "./common/middleware/error-handler.js";
@@ -18,6 +19,7 @@ import { subscriptionRoutes } from "./modules/subscription/subscription.routes.j
 import { userRoutes } from "./modules/user/user.routes.js";
 import { voiceRoutes } from "./modules/voice/voice.routes.js";
 import { developerRoutes } from "./modules/developer/developer.routes.js";
+import { webhookRoutes } from "./modules/webhook/webhook.routes.js";
 import { registerWebSocketGateway } from "./infra/ws/ws.gateway.js";
 import { ConversationRepository } from "./modules/conversation/conversation.repository.js";
 import { AiOrchestratorService } from "./services/ai/ai-orchestrator.service.js";
@@ -50,6 +52,12 @@ export async function buildApp() {
       files: 1,
     },
   });
+  await app.register(rawBody, {
+    field: "rawBody",
+    global: false,
+    encoding: "utf8",
+    runFirst: true,
+  });
 
   await app.register(jwt, {
     secret: env.JWT_ACCESS_SECRET,
@@ -72,6 +80,7 @@ export async function buildApp() {
       users: "/api/users/me",
       voice: "/api/voice/settings",
       developer: "/api/developer/keys",
+      resendWebhook: "/api/webhooks/resend",
     },
     timestamp: new Date().toISOString(),
   }));
@@ -94,6 +103,7 @@ export async function buildApp() {
   await app.register(userRoutes);
   await app.register(voiceRoutes);
   await app.register(developerRoutes);
+  await app.register(webhookRoutes);
 
   registerWebSocketGateway(app, new AiOrchestratorService(new RagService()), new ConversationRepository());
 

@@ -4,6 +4,10 @@ import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import { env } from "../../config/env.js";
 import { redis } from "../../infra/cache/redis.js";
+import { prisma } from "../../infra/database/prisma.js";
+import { rateLimitService } from "../services/plan-rate-limit.service.js";
+import { AppError } from "../errors/app-error.js";
+import { logger } from "../../config/logger.js";
 
 export async function registerSecurityPlugins(fastify: FastifyInstance): Promise<void> {
   await fastify.register(helmet, {
@@ -23,8 +27,9 @@ export async function registerSecurityPlugins(fastify: FastifyInstance): Promise
     credentials: true,
   });
 
+  // Global rate limit (catches everything)
   await fastify.register(rateLimit, {
-    max: 100,
+    max: 1000,
     timeWindow: "1 minute",
     redis,
     addHeadersOnExceeding: {
@@ -33,8 +38,66 @@ export async function registerSecurityPlugins(fastify: FastifyInstance): Promise
       "x-ratelimit-reset": true,
     },
     keyGenerator(request) {
-      const user = request.user as { sub?: string } | undefined;
-      return user?.sub ?? request.ip;
+      const user = request.user as { sub?: string; type?: string; apiKeyId?: string } | undefined;
+      const principal = user?.type === "api_key" && user.apiKeyId ? `api-key:${user.apiKeyId}` : user?.sub ? `user:${user.sub}` : `ip:${request.ip}`;
+      return `${principal}:${request.routeOptions.url}`;
     },
+  });
+
+  // Plan-based rate limiting for authenticated requests
+  fastify.addHook("preHandler", async (request, reply) => {
+    const user = request.user as { sub?: string; type?: string; apiKeyId?: string } | undefined;
+
+    // Skip rate limit check for public endpoints
+    if (!user || !user.sub) {
+      return;
+    }
+
+    try {
+      // Determine plan type
+      let planType = "FREE";
+      if (user.type === "api_key") {
+        // Look up API key plan via user
+        const apiKey = await prisma.aPIKey.findUnique({
+          where: { id: user.apiKeyId },
+          include: { user: { include: { subscriptions: { include: { plan: true } } } } },
+        });
+
+        if (apiKey?.user?.subscriptions?.[0]?.plan) {
+          planType = apiKey.user.subscriptions[0].plan.type;
+        }
+      } else {
+        // Look up user's subscription plan
+        const subscription = await prisma.subscription.findFirst({
+          where: {
+            userId: user.sub,
+            status: "ACTIVE",
+          },
+          include: { plan: true },
+        });
+
+        if (subscription?.plan) {
+          planType = subscription.plan.type;
+        }
+      }
+
+      const principal = user.type === "api_key" ? `api-key:${user.apiKeyId}` : `user:${user.sub}`;
+
+      // Check minute-level limit strict for FREE
+      if (planType === "FREE") {
+        const allowed = await rateLimitService.checkRequestLimit(principal, planType as any, "minute");
+        if (!allowed) {
+          logger.warn({ principal, planType }, "Rate limit exceeded (minute)");
+          throw new AppError(429, "RATE_LIMIT_EXCEEDED", "Rate limit exceeded. Please try again later.");
+        }
+      }
+
+      // Store plan in request context for later use
+      (request as any).userPlan = planType;
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      logger.error({ error }, "Error checking plan-based rate limit");
+      // Don't fail auth on rate limit check error; let it pass
+    }
   });
 }

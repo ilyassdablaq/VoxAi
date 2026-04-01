@@ -1,8 +1,11 @@
 import { logger } from "../../config/logger.js";
+import { env } from "../../config/env.js";
+import { prisma } from "../../infra/database/prisma.js";
 import { VoiceRepository } from "../../modules/voice/voice.repository.js";
 import { RagService } from "../rag/rag.service.js";
 import {
   ChatMessage,
+  LlmRequestOptions,
   LlmGenerationResult,
   MockLlmProvider,
   ProviderSet,
@@ -11,6 +14,12 @@ import {
   TtsVoiceOptions,
   createProviders,
 } from "./providers.js";
+import {
+  applyInputGuardrails,
+  applyOutputGuardrails,
+  buildGuardrailSystemDirectives,
+  sanitizeContextSnippets,
+} from "./guardrails.service.js";
 
 const EMPTY_MP3_BASE64 = "SUQzAwAAAAAA";
 
@@ -34,6 +43,7 @@ function buildLanguageInstructions(language: string): string {
 export class AiOrchestratorService {
   private readonly providers: ProviderSet;
   private readonly voiceRepository: VoiceRepository;
+  private readonly planCache = new Map<string, { planType: "FREE" | "PRO" | "ENTERPRISE"; expiresAt: number }>();
 
   constructor(private readonly ragService: RagService) {
     this.providers = createProviders();
@@ -48,9 +58,11 @@ export class AiOrchestratorService {
     history?: Array<{ role: "USER" | "ASSISTANT" | "SYSTEM"; content: string }>;
   }) {
     const sttResult = await this.transcribe(input.audioChunk, input.language);
+    const safeTranscript = applyInputGuardrails(sttResult.text);
 
-    const contexts = await this.ragService.retrieveContext(input.userId, sttResult.text, 3);
-    const ragContext = this.ragService.buildPrompt(sttResult.text, contexts);
+    const contexts = sanitizeContextSnippets(await this.ragService.retrieveContext(input.userId, safeTranscript, 3));
+    const ragContext = `${buildGuardrailSystemDirectives()}\n\n${this.ragService.buildPrompt(safeTranscript, contexts)}`;
+    const llmOptions = await this.resolveLlmOptions(input.userId);
 
     const llmMessages = input.history?.length
       ? input.history.map((message) => ({
@@ -60,17 +72,18 @@ export class AiOrchestratorService {
       : [
           {
             role: "user" as const,
-            content: sttResult.text,
+            content: safeTranscript,
           },
         ];
 
-    const llmResult = await this.generateText(`${ragContext}\n\n${buildLanguageInstructions(input.language)}`, llmMessages);
+    const llmResult = await this.generateText(`${ragContext}\n\n${buildLanguageInstructions(input.language)}`, llmMessages, llmOptions);
+    const safeResponseText = applyOutputGuardrails(llmResult.text);
 
-    const ttsResult = await this.speak(input.userId, llmResult.text, input.language);
+    const ttsResult = await this.speak(input.userId, safeResponseText, input.language);
 
     return {
-      transcript: sttResult.text,
-      responseText: llmResult.text,
+      transcript: safeTranscript,
+      responseText: safeResponseText,
       tokenCount: llmResult.usage.totalTokens,
       promptTokens: llmResult.usage.promptTokens,
       completionTokens: llmResult.usage.completionTokens,
@@ -90,8 +103,10 @@ export class AiOrchestratorService {
     syntheticEmbedding?: number[];
     history?: Array<{ role: "USER" | "ASSISTANT" | "SYSTEM"; content: string }>;
   }) {
-    const contexts = await this.ragService.retrieveContext(input.userId, input.text, 3);
-    const ragContext = this.ragService.buildPrompt(input.text, contexts);
+    const safeText = applyInputGuardrails(input.text);
+    const contexts = sanitizeContextSnippets(await this.ragService.retrieveContext(input.userId, safeText, 3));
+    const ragContext = `${buildGuardrailSystemDirectives()}\n\n${this.ragService.buildPrompt(safeText, contexts)}`;
+    const llmOptions = await this.resolveLlmOptions(input.userId);
 
     const llmMessages = input.history?.length
       ? input.history.map((message) => ({
@@ -101,16 +116,17 @@ export class AiOrchestratorService {
       : [
           {
             role: "user" as const,
-            content: input.text,
+            content: safeText,
           },
         ];
 
-    const llmResult = await this.generateText(`${ragContext}\n\n${buildLanguageInstructions(input.language)}`, llmMessages);
+    const llmResult = await this.generateText(`${ragContext}\n\n${buildLanguageInstructions(input.language)}`, llmMessages, llmOptions);
+    const safeResponseText = applyOutputGuardrails(llmResult.text);
 
-    const ttsResult = await this.speak(input.userId, llmResult.text, input.language);
+    const ttsResult = await this.speak(input.userId, safeResponseText, input.language);
 
     return {
-      responseText: llmResult.text,
+      responseText: safeResponseText,
       tokenCount: llmResult.usage.totalTokens,
       promptTokens: llmResult.usage.promptTokens,
       completionTokens: llmResult.usage.completionTokens,
@@ -133,8 +149,10 @@ export class AiOrchestratorService {
     },
     onToken: (token: string) => void,
   ) {
-    const contexts = await this.ragService.retrieveContext(input.userId, input.text, 3);
-    const ragContext = this.ragService.buildPrompt(input.text, contexts);
+    const safeText = applyInputGuardrails(input.text);
+    const contexts = sanitizeContextSnippets(await this.ragService.retrieveContext(input.userId, safeText, 3));
+    const ragContext = `${buildGuardrailSystemDirectives()}\n\n${this.ragService.buildPrompt(safeText, contexts)}`;
+    const llmOptions = await this.resolveLlmOptions(input.userId);
 
     const llmMessages = input.history?.length
       ? input.history.map((message) => ({
@@ -144,16 +162,22 @@ export class AiOrchestratorService {
       : [
           {
             role: "user" as const,
-            content: input.text,
+            content: safeText,
           },
         ];
 
-    const llmResult = await this.streamGenerateText(`${ragContext}\n\n${buildLanguageInstructions(input.language)}`, llmMessages, onToken);
+    const llmResult = await this.streamGenerateText(
+      `${ragContext}\n\n${buildLanguageInstructions(input.language)}`,
+      llmMessages,
+      onToken,
+      llmOptions,
+    );
+    const safeResponseText = applyOutputGuardrails(llmResult.text);
 
-    const ttsResult = await this.speak(input.userId, llmResult.text, input.language);
+    const ttsResult = await this.speak(input.userId, safeResponseText, input.language);
 
     return {
-      responseText: llmResult.text,
+      responseText: safeResponseText,
       tokenCount: llmResult.usage.totalTokens,
       promptTokens: llmResult.usage.promptTokens,
       completionTokens: llmResult.usage.completionTokens,
@@ -177,13 +201,13 @@ export class AiOrchestratorService {
     };
   }
 
-  private async generateText(context: string, messages: ChatMessage[]): Promise<LlmGenerationResult> {
+  private async generateText(context: string, messages: ChatMessage[], options: LlmRequestOptions): Promise<LlmGenerationResult> {
     try {
       if (this.providers.llm.generateResponseWithUsage) {
-        return await this.providers.llm.generateResponseWithUsage(context, messages);
+        return await this.providers.llm.generateResponseWithUsage(context, messages, options);
       }
 
-      const text = await this.providers.llm.generateResponse(context, messages);
+      const text = await this.providers.llm.generateResponse(context, messages, options);
       return {
         text,
         usage: {
@@ -193,9 +217,22 @@ export class AiOrchestratorService {
         },
       };
     } catch (error) {
-      logger.error({ error }, "Primary LLM provider failed, falling back to mock provider");
+      logger.error({ error, model: options.model }, "Primary LLM provider failed");
+      if (env.OPENAI_FALLBACK_MODEL && env.OPENAI_FALLBACK_MODEL !== options.model && this.providers.llm.generateResponseWithUsage) {
+        try {
+          return await this.providers.llm.generateResponseWithUsage(context, messages, {
+            ...options,
+            model: env.OPENAI_FALLBACK_MODEL,
+            maxCompletionTokens: Math.min(options.maxCompletionTokens ?? 500, 400),
+          });
+        } catch (fallbackError) {
+          logger.error({ fallbackError, fallbackModel: env.OPENAI_FALLBACK_MODEL }, "Fallback LLM model failed");
+        }
+      }
+
+      logger.error({ error }, "Falling back to mock provider");
       const fallback = new MockLlmProvider();
-      const text = await fallback.generateResponse(context, messages);
+      const text = await fallback.generateResponse(context, messages, options);
       return {
         text,
         usage: {
@@ -211,19 +248,33 @@ export class AiOrchestratorService {
     context: string,
     messages: ChatMessage[],
     onToken: (token: string) => void,
+    options: LlmRequestOptions,
   ): Promise<LlmGenerationResult> {
     try {
       if (this.providers.llm.streamResponse) {
-        return await this.providers.llm.streamResponse(context, messages, onToken);
+        return await this.providers.llm.streamResponse(context, messages, onToken, options);
       }
 
-      const nonStream = await this.generateText(context, messages);
+      const nonStream = await this.generateText(context, messages, options);
       onToken(nonStream.text);
       return nonStream;
     } catch (error) {
-      logger.error({ error }, "Primary streaming LLM provider failed, falling back to mock provider");
+      logger.error({ error, model: options.model }, "Primary streaming LLM provider failed");
+      if (env.OPENAI_FALLBACK_MODEL && env.OPENAI_FALLBACK_MODEL !== options.model && this.providers.llm.streamResponse) {
+        try {
+          return await this.providers.llm.streamResponse(context, messages, onToken, {
+            ...options,
+            model: env.OPENAI_FALLBACK_MODEL,
+            maxCompletionTokens: Math.min(options.maxCompletionTokens ?? 500, 400),
+          });
+        } catch (fallbackError) {
+          logger.error({ fallbackError, fallbackModel: env.OPENAI_FALLBACK_MODEL }, "Fallback streaming model failed");
+        }
+      }
+
+      logger.error({ error }, "Falling back to mock provider for streaming");
       const fallback = new MockLlmProvider();
-      const text = await fallback.generateResponse(context, messages);
+      const text = await fallback.generateResponse(context, messages, options);
       onToken(text);
       return {
         text,
@@ -234,6 +285,67 @@ export class AiOrchestratorService {
         },
       };
     }
+  }
+
+  private async resolveLlmOptions(userId: string): Promise<LlmRequestOptions> {
+    const planType = await this.resolvePlanType(userId);
+
+    if (planType === "ENTERPRISE") {
+      return {
+        model: env.OPENAI_MODEL_ENTERPRISE ?? env.OPENAI_MODEL_PRO ?? env.OPENAI_MODEL,
+        maxCompletionTokens: 800,
+        temperature: 0.6,
+      };
+    }
+
+    if (planType === "PRO") {
+      return {
+        model: env.OPENAI_MODEL_PRO ?? env.OPENAI_MODEL,
+        maxCompletionTokens: 600,
+        temperature: 0.6,
+      };
+    }
+
+    return {
+      model: env.OPENAI_MODEL_FREE ?? env.OPENAI_MODEL,
+      maxCompletionTokens: 350,
+      temperature: 0.5,
+    };
+  }
+
+  private async resolvePlanType(userId: string): Promise<"FREE" | "PRO" | "ENTERPRISE"> {
+    const now = Date.now();
+    const cached = this.planCache.get(userId);
+    if (cached && cached.expiresAt > now) {
+      return cached.planType;
+    }
+
+    let planType: "FREE" | "PRO" | "ENTERPRISE" = "FREE";
+
+    try {
+      const subscription = await prisma.subscription.findFirst({
+        where: { userId, status: "ACTIVE" },
+        orderBy: { startsAt: "desc" },
+        select: {
+          plan: {
+            select: {
+              type: true,
+            },
+          },
+        },
+      });
+
+      planType = (subscription?.plan.type ?? "FREE") as "FREE" | "PRO" | "ENTERPRISE";
+    } catch (error) {
+      logger.warn({ error, userId }, "Could not resolve plan type from database, defaulting to FREE");
+    }
+
+    this.planCache.set(userId, {
+      planType,
+      expiresAt: now + 60_000,
+    });
+
+    return planType;
   }
 
   private async speak(userId: string, text: string, language: string): Promise<TtsResult> {

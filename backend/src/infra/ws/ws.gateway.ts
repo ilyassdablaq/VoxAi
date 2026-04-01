@@ -3,6 +3,7 @@ import { RawData, WebSocket } from "ws";
 import { AppError } from "../../common/errors/app-error.js";
 import { AiOrchestratorService } from "../../services/ai/ai-orchestrator.service.js";
 import { ConversationRepository } from "../../modules/conversation/conversation.repository.js";
+import { assertTenantAccess } from "../../common/services/tenant-guard.service.js";
 
 export function registerWebSocketGateway(
   fastify: FastifyInstance,
@@ -38,7 +39,22 @@ export function registerWebSocketGateway(
         authenticatedUserId = user.sub;
       const conversation = await conversationRepository.getConversationById(conversationId);
 
-      if (!conversation || conversation.userId !== user.sub) {
+      if (!conversation) {
+        typedSocket.send(
+          JSON.stringify({
+            type: "error",
+            error: {
+              message: "Conversation not found",
+            },
+          }),
+        );
+        typedSocket.close(1008, "Unauthorized");
+        return;
+      }
+
+      try {
+        assertTenantAccess(conversation.userId, user.sub, "conversation");
+      } catch {
         typedSocket.send(
           JSON.stringify({
             type: "error",

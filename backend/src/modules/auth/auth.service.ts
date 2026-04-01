@@ -7,6 +7,7 @@ import { AuthRepository } from "./auth.repository.js";
 import { LoginInput, RefreshInput, RegisterInput, ForgotPasswordInput, ResetPasswordInput } from "./auth.schemas.js";
 import { prisma } from "../../infra/database/prisma.js";
 import { logger } from "../../config/logger.js";
+import { emailService } from "../../services/email/email.service.js";
 
 export class AuthService {
   constructor(
@@ -135,6 +136,17 @@ export class AuthService {
         passwordResetToken: resetTokenHash,
         passwordResetExpiresAt: expiresAt,
       },
+    });
+
+    const resetPath = env.RESET_PASSWORD_PATH.startsWith("/")
+      ? env.RESET_PASSWORD_PATH
+      : `/${env.RESET_PASSWORD_PATH}`;
+    const resetUrl = new URL(resetPath, env.APP_ORIGIN);
+    resetUrl.searchParams.set("token", resetToken);
+
+    await emailService.sendPasswordResetEmail({
+      email: user.email,
+      resetLink: resetUrl.toString(),
     });
 
     logger.info({ email: user.email }, "Password reset token issued");

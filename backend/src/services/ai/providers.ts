@@ -25,6 +25,12 @@ export type LlmGenerationResult = {
   usage: LlmUsage;
 };
 
+export type LlmRequestOptions = {
+  model?: string;
+  maxCompletionTokens?: number;
+  temperature?: number;
+};
+
 export type TtsResult = {
   audioBuffer: Buffer;
   durationSeconds: number;
@@ -44,12 +50,13 @@ export interface SttProvider {
 }
 
 export interface LlmProvider {
-  generateResponse(context: string, messages: ChatMessage[]): Promise<string>;
-  generateResponseWithUsage?(context: string, messages: ChatMessage[]): Promise<LlmGenerationResult>;
+  generateResponse(context: string, messages: ChatMessage[], options?: LlmRequestOptions): Promise<string>;
+  generateResponseWithUsage?(context: string, messages: ChatMessage[], options?: LlmRequestOptions): Promise<LlmGenerationResult>;
   streamResponse?(
     context: string,
     messages: ChatMessage[],
     onToken: (token: string) => void,
+    options?: LlmRequestOptions,
   ): Promise<LlmGenerationResult>;
 }
 
@@ -110,13 +117,13 @@ export class MockSttProvider implements SttProvider {
 }
 
 export class MockLlmProvider implements LlmProvider {
-  async generateResponse(context: string, messages: ChatMessage[]): Promise<string> {
+  async generateResponse(context: string, messages: ChatMessage[], _options?: LlmRequestOptions): Promise<string> {
     const latestUserMessage = messages.filter((message) => message.role === "user").at(-1)?.content ?? "";
     return `AI response based on context (${context.slice(0, 60)}...) and message: ${latestUserMessage.slice(0, 80)}...`;
   }
 
-  async generateResponseWithUsage(context: string, messages: ChatMessage[]): Promise<LlmGenerationResult> {
-    const text = await this.generateResponse(context, messages);
+  async generateResponseWithUsage(context: string, messages: ChatMessage[], options?: LlmRequestOptions): Promise<LlmGenerationResult> {
+    const text = await this.generateResponse(context, messages, options);
     return {
       text,
       usage: {
@@ -151,16 +158,16 @@ export class OpenAiLlmProvider implements LlmProvider {
     this.client = new OpenAI({ apiKey });
   }
 
-  async generateResponse(context: string, messages: ChatMessage[]): Promise<string> {
-    const result = await this.generateResponseWithUsage(context, messages);
+  async generateResponse(context: string, messages: ChatMessage[], options?: LlmRequestOptions): Promise<string> {
+    const result = await this.generateResponseWithUsage(context, messages, options);
     return result.text;
   }
 
-  async generateResponseWithUsage(context: string, messages: ChatMessage[]): Promise<LlmGenerationResult> {
+  async generateResponseWithUsage(context: string, messages: ChatMessage[], options?: LlmRequestOptions): Promise<LlmGenerationResult> {
     const completion = await this.client.chat.completions.create({
-      model: env.OPENAI_MODEL,
-      temperature: 0.6,
-      max_completion_tokens: 500,
+      model: options?.model ?? env.OPENAI_MODEL,
+      temperature: options?.temperature ?? 0.6,
+      max_completion_tokens: options?.maxCompletionTokens ?? 500,
       messages: [
         {
           role: "system",
@@ -187,13 +194,14 @@ export class OpenAiLlmProvider implements LlmProvider {
     context: string,
     messages: ChatMessage[],
     onToken: (token: string) => void,
+    options?: LlmRequestOptions,
   ): Promise<LlmGenerationResult> {
     let text = "";
 
     const stream = await this.client.chat.completions.create({
-      model: env.OPENAI_MODEL,
-      temperature: 0.6,
-      max_completion_tokens: 500,
+      model: options?.model ?? env.OPENAI_MODEL,
+      temperature: options?.temperature ?? 0.6,
+      max_completion_tokens: options?.maxCompletionTokens ?? 500,
       stream: true,
       stream_options: { include_usage: true },
       messages: [

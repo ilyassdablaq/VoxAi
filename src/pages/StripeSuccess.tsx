@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
+import { trackEvent } from '@/lib/product-analytics';
 
 export function StripeSuccess() {
   const navigate = useNavigate();
@@ -12,6 +13,9 @@ export function StripeSuccess() {
       try {
         // Refresh subscription to get updated plan from webhook writes.
         await refreshSubscription();
+        trackEvent('plan_upgraded', {
+          flow: 'stripe_redirect',
+        });
         setTimeout(() => {
           navigate('/dashboard');
         }, 1800);
