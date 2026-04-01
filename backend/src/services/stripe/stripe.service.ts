@@ -43,10 +43,11 @@ export class StripeService {
       throw new AppError(404, 'PLAN_NOT_FOUND', 'Requested plan not found');
     }
 
+    // Prefer env-mapped IDs so deployments can switch test/live without depending on seeded DB values.
     const stripePriceId =
-      plan.stripePriceId ||
       getStripePriceForPlan(plan.key) ||
-      getStripePriceForPlan(normalizedPlanKey);
+      getStripePriceForPlan(normalizedPlanKey) ||
+      plan.stripePriceId;
 
     const paymentLinkUrl = await this.buildPaymentLinkUrl(userId, plan.key, normalizedPlanKey);
 
