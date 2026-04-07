@@ -14,6 +14,13 @@ export interface Plan {
 }
 
 export interface CurrentSubscription {
+  plan: "FREE" | "PRO" | "ENTERPRISE";
+  effectivePlan: "FREE" | "PRO" | "ENTERPRISE";
+  isOverride: boolean;
+  overrideExpiresAt: string | null;
+}
+
+export interface SubscriptionRecord {
   id: string;
   userId: string;
   planId: string;
@@ -57,8 +64,8 @@ export const subscriptionService = {
     return apiClient.get<CurrentSubscription>("/api/subscriptions/current");
   },
 
-  async changePlan(planKey: string): Promise<CurrentSubscription> {
-    const result = await apiClient.post<CurrentSubscription>("/api/subscriptions/change", { planKey });
+  async changePlan(planKey: string): Promise<SubscriptionRecord> {
+    const result = await apiClient.post<SubscriptionRecord>("/api/subscriptions/change", { planKey });
     trackEvent("plan_upgraded", {
       planKey,
       flow: "direct_change",
@@ -67,8 +74,8 @@ export const subscriptionService = {
     return result;
   },
 
-  cancelToFreePlan(): Promise<CurrentSubscription> {
-    return apiClient.post<CurrentSubscription>("/api/subscriptions/cancel", {});
+  cancelToFreePlan(): Promise<SubscriptionRecord> {
+    return apiClient.post<SubscriptionRecord>("/api/subscriptions/cancel", {});
   },
 
   async startUpgrade(planKey: string): Promise<UpgradeResponse> {

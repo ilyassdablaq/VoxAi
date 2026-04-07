@@ -56,6 +56,8 @@ model User {
   conversations            Conversation[]
   contactMessages          ContactMessage[]
   subscriptions            Subscription[]
+  adminPlanOverrides       AdminPlanOverride[] @relation("UserPlanOverrides")
+  createdPlanOverrides     AdminPlanOverride[] @relation("AdminCreatedOverrides")
   usageRecords             Usage[]
   apiKeys                  APIKey[]
   sloMetrics               SloMetric[]
@@ -163,6 +165,24 @@ model Subscription {
 
   @@index([userId, status])
   @@index([stripeSubscriptionId])
+}
+
+model AdminPlanOverride {
+  id               String   @id @default(uuid())
+  userId           String
+  plan             PlanType
+  reason           String?
+  expiresAt        DateTime?
+  createdByAdminId String
+  createdAt        DateTime @default(now())
+  revokedAt        DateTime?
+
+  user             User     @relation("UserPlanOverrides", fields: [userId], references: [id], onDelete: Cascade)
+  createdByAdmin   User     @relation("AdminCreatedOverrides", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([createdByAdminId, createdAt])
+  @@index([createdAt])
 }
 
 model Usage {

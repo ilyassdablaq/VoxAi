@@ -20,7 +20,7 @@ export function PlanBadge() {
           : 'bg-gray-100 text-gray-700'
       )}
     >
-      {subscription.plan.name}
+      {subscription.effectivePlan}{subscription.isOverride ? " (override)" : ""}
     </div>
   );
 }

@@ -4,11 +4,13 @@ import { prisma } from "../../infra/database/prisma.js";
 import { PlanRepository } from "../plan/plan.repository.js";
 import { PlanService } from "../plan/plan.service.js";
 import { stripeService } from "../../services/stripe/stripe.service.js";
+import { PlanCheckService } from "../../common/services/plan-check.service.js";
 
 export class SubscriptionService {
   constructor(private readonly repository: SubscriptionRepository) {}
 
   private readonly planService = new PlanService(new PlanRepository());
+  private readonly planCheckService = new PlanCheckService();
 
   private async expireEndedSubscriptions(userId: string) {
     await prisma.subscription.updateMany({
@@ -21,14 +23,29 @@ export class SubscriptionService {
     });
   }
 
-  async getCurrentSubscription(userId: string) {
+  private async getCurrentBillingSubscription(userId: string) {
     await this.expireEndedSubscriptions(userId);
     await this.repository.ensureDefaultFreePlanSubscription(userId);
     const subscription = await this.repository.getCurrentSubscriptionWithPlan(userId);
     if (!subscription) {
       throw new AppError(404, 'SUBSCRIPTION_NOT_FOUND', 'No active subscription found');
     }
+
     return subscription;
+  }
+
+  async getCurrentSubscription(userId: string) {
+    const subscription = await this.getCurrentBillingSubscription(userId);
+
+    const activeOverride = await this.planCheckService.getActiveOverride(userId);
+    const effectivePlan = await this.planCheckService.getEffectivePlanAccess(userId);
+
+    return {
+      plan: subscription.plan.type,
+      effectivePlan: effectivePlan.type,
+      isOverride: effectivePlan.source === "admin_override",
+      overrideExpiresAt: activeOverride?.expiresAt ?? null,
+    };
   }
 
   async getAvailablePlans() {
@@ -36,13 +53,7 @@ export class SubscriptionService {
   }
 
   async cancelAtPeriodEnd(userId: string) {
-    await this.expireEndedSubscriptions(userId);
-    await this.repository.ensureDefaultFreePlanSubscription(userId);
-
-    const currentSubscription = await this.repository.getCurrentSubscriptionWithPlan(userId);
-    if (!currentSubscription) {
-      throw new AppError(404, 'SUBSCRIPTION_NOT_FOUND', 'No active subscription found');
-    }
+    const currentSubscription = await this.getCurrentBillingSubscription(userId);
 
     if (currentSubscription.plan.key === 'free') {
       return currentSubscription;
@@ -59,12 +70,12 @@ export class SubscriptionService {
         },
       });
 
-      return this.getCurrentSubscription(userId);
+      return this.getCurrentBillingSubscription(userId);
     }
 
     // Non-Stripe subscriptions can be downgraded immediately.
     await this.planService.changePlan(userId, 'free');
-    return this.getCurrentSubscription(userId);
+    return this.getCurrentBillingSubscription(userId);
   }
 
   async validateSubscriptionActive(userId: string): Promise<boolean> {

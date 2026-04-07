@@ -1,6 +1,6 @@
 import { logger } from "../../config/logger.js";
+import { PlanCheckService } from "../../common/services/plan-check.service.js";
 import { env } from "../../config/env.js";
-import { prisma } from "../../infra/database/prisma.js";
 import { VoiceRepository } from "../../modules/voice/voice.repository.js";
 import { RagService } from "../rag/rag.service.js";
 import {
@@ -55,6 +55,7 @@ export class AiOrchestratorService {
   private readonly providers: ProviderSet;
   private readonly voiceRepository: VoiceRepository;
   private readonly planCache = new Map<string, { planType: "FREE" | "PRO" | "ENTERPRISE"; expiresAt: number }>();
+  private readonly planCheckService = new PlanCheckService();
 
   constructor(private readonly ragService: RagService) {
     this.providers = createProviders();
@@ -342,19 +343,8 @@ export class AiOrchestratorService {
     let planType: "FREE" | "PRO" | "ENTERPRISE" = "FREE";
 
     try {
-      const subscription = await prisma.subscription.findFirst({
-        where: { userId, status: "ACTIVE" },
-        orderBy: { startsAt: "desc" },
-        select: {
-          plan: {
-            select: {
-              type: true,
-            },
-          },
-        },
-      });
-
-      planType = (subscription?.plan.type ?? "FREE") as "FREE" | "PRO" | "ENTERPRISE";
+      const effectivePlan = await this.planCheckService.getEffectivePlanAccess(userId);
+      planType = effectivePlan.type;
     } catch (error) {
       logger.warn({ error, userId }, "Could not resolve plan type from database, defaulting to FREE");
     }

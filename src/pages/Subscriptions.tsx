@@ -112,7 +112,7 @@ export default function Subscriptions() {
     queryFn: () => subscriptionService.getCheckoutCapabilities(),
   });
 
-  const currentPlanKey = currentSubscription?.plan?.key;
+  const currentPlanKey = currentSubscription?.plan?.toLowerCase();
 
   useEffect(() => {
     const paymentState = searchParams.get("payment");
@@ -168,6 +168,11 @@ export default function Subscriptions() {
     return [...sourcePlans].sort((a, b) => a.priceCents - b.priceCents);
   }, [plans]);
 
+  const currentPlanDetails = useMemo(
+    () => sortedPlans.find((plan) => plan.key === currentPlanKey),
+    [sortedPlans, currentPlanKey],
+  );
+
   const paymentMethods = useMemo(() => {
     const apiMethods = checkoutCapabilities?.paymentMethods;
     const source = apiMethods && apiMethods.length > 0 ? apiMethods : fallbackPaymentMethods;
@@ -188,21 +193,21 @@ export default function Subscriptions() {
               <div className="space-y-3">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                   <div>
-                    <p className="text-lg font-semibold">{currentSubscription.plan.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {currentSubscription.plan.voiceMinutes} voice minutes • {currentSubscription.plan.tokenLimit.toLocaleString()} tokens/month
-                    </p>
+                    <p className="text-lg font-semibold">{currentPlanDetails?.name ?? currentSubscription.plan}</p>
+                    {currentPlanDetails ? (
+                      <p className="text-sm text-muted-foreground">
+                        {currentPlanDetails.voiceMinutes} voice minutes • {currentPlanDetails.tokenLimit.toLocaleString()} tokens/month
+                      </p>
+                    ) : null}
+                    {currentSubscription.isOverride ? (
+                      <p className="text-xs text-amber-700 mt-1">
+                        Effective access is currently {currentSubscription.effectivePlan}
+                        {currentSubscription.overrideExpiresAt ? ` until ${new Date(currentSubscription.overrideExpiresAt).toLocaleString("de-DE")}` : " via admin override"}.
+                      </p>
+                    ) : null}
                   </div>
                   <p className="text-sm text-muted-foreground">Billing is processed securely through Stripe checkout.</p>
                 </div>
-                {currentSubscription.endsAt && (
-                  <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
-                    <p className="text-xs text-amber-900 font-medium">
-                      Plan ends on {new Date(currentSubscription.endsAt).toLocaleDateString('de-DE', { year: 'numeric', month: 'long', day: 'numeric' })}
-                    </p>
-                    <p className="text-xs text-amber-800 mt-1">Your access will be downgraded to Free plan after this date.</p>
-                  </div>
-                )}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">No active subscription yet. Select a plan below.</p>

@@ -1,6 +1,7 @@
 import { ReactNode, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
+  Shield,
   BarChart3,
   Bot,
   CircleHelp,
@@ -52,9 +53,9 @@ interface MenuSectionProps extends MenuSectionConfig {
   onItemClick?: (item: MenuItemConfig) => void;
 }
 
-const getPlanLabel = (planName?: string) => {
-  if (!planName) return "Free Plan";
-  return planName.toLowerCase().includes("plan") ? planName : `${planName} Plan`;
+const getPlanLabel = (planType?: "FREE" | "PRO" | "ENTERPRISE") => {
+  if (!planType) return "Free Plan";
+  return `${planType} Plan`;
 };
 
 function MenuItem({ to, label, icon: Icon, end, onClick }: MenuItemConfig) {
@@ -125,6 +126,7 @@ export function DashboardShell({ title, description, children }: DashboardShellP
   const accountItems: MenuItemConfig[] = [
     { to: "/dashboard/profile", label: "Profile", icon: User },
     { to: "/dashboard/subscriptions", label: "Subscriptions", icon: CreditCard },
+    ...(user?.role === "ADMIN" ? [{ to: "/dashboard/admin", label: "Admin Panel", icon: Shield }] : []),
     { to: "/dashboard/faq", label: "Help / FAQ", icon: CircleHelp },
     { to: "/", label: "Logout", icon: LogOut, onClick: handleLogout },
   ];
@@ -138,7 +140,7 @@ export function DashboardShell({ title, description, children }: DashboardShellP
 
   const allNavItems = menuSections.flatMap((section) => section.items);
 
-  const currentPlanLabel = getPlanLabel(subscription?.plan?.name);
+  const currentPlanLabel = getPlanLabel(subscription?.effectivePlan);
 
   function handleLogout() {
     logout();

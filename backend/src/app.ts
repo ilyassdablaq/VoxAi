@@ -20,6 +20,7 @@ import { userRoutes } from "./modules/user/user.routes.js";
 import { voiceRoutes } from "./modules/voice/voice.routes.js";
 import { developerRoutes } from "./modules/developer/developer.routes.js";
 import { webhookRoutes } from "./modules/webhook/webhook.routes.js";
+import { adminRoutes } from "./modules/admin/admin.routes.js";
 import { registerWebSocketGateway } from "./infra/ws/ws.gateway.js";
 import { ConversationRepository } from "./modules/conversation/conversation.repository.js";
 import { AiOrchestratorService } from "./services/ai/ai-orchestrator.service.js";
@@ -80,6 +81,7 @@ export async function buildApp() {
       users: "/api/users/me",
       voice: "/api/voice/settings",
       developer: "/api/developer/keys",
+      admin: "/api/admin/users/search",
       resendWebhook: "/api/webhooks/resend",
     },
     timestamp: new Date().toISOString(),
@@ -103,6 +105,7 @@ export async function buildApp() {
   await app.register(userRoutes);
   await app.register(voiceRoutes);
   await app.register(developerRoutes);
+  await app.register(adminRoutes);
   await app.register(webhookRoutes);
 
   registerWebSocketGateway(app, new AiOrchestratorService(new RagService()), new ConversationRepository());

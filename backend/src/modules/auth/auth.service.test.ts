@@ -6,6 +6,11 @@ import { testFixtures, createMockFastifyRequest } from "@/test/mocks";
 import { AppError } from "@/common/errors/app-error";
 
 vi.mock("bcryptjs");
+vi.mock("@/services/email/email.service", () => ({
+  emailService: {
+    sendPasswordResetEmail: vi.fn(),
+  },
+}));
 vi.mock("@/infra/database/prisma", () => ({
   prisma: {
     user: {
@@ -16,6 +21,7 @@ vi.mock("@/infra/database/prisma", () => ({
 }));
 
 import { prisma } from "@/infra/database/prisma";
+import { emailService } from "@/services/email/email.service";
 
 describe("AuthService", () => {
   let authService: AuthService;
@@ -285,6 +291,15 @@ describe("AuthService", () => {
 
       expect(expiresAt).toBeGreaterThanOrEqual(beforeTime + oneHourMs - 100);
       expect(expiresAt).toBeLessThanOrEqual(afterTime + oneHourMs + 100);
+    });
+
+    it("should not throw when email provider fails", async () => {
+      mockRepository.findUserByEmail.mockResolvedValue(testFixtures.user);
+      vi.mocked(prisma.user.update).mockResolvedValue(testFixtures.user as never);
+      vi.mocked(emailService.sendPasswordResetEmail).mockRejectedValue(new Error("resend unavailable"));
+
+      await expect(authService.forgotPassword({ email: testFixtures.user.email })).resolves.toBeUndefined();
+      expect(vi.mocked(prisma.user.update)).toHaveBeenCalled();
     });
   });
 

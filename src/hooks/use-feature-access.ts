@@ -26,7 +26,7 @@ export function useFeatureAccess() {
     const requiredPlan = FEATURE_PLAN_MAP[featureName];
     if (!requiredPlan) return true; // Feature not gated
 
-    const userLevel = planHierarchy[subscription.plan.type] ?? 0;
+    const userLevel = planHierarchy[subscription.effectivePlan] ?? 0;
     const requiredLevel = planHierarchy[requiredPlan] ?? 0;
 
     return userLevel >= requiredLevel;
