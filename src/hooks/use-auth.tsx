@@ -31,6 +31,48 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+interface AuthErrorLike {
+  status?: number;
+  code?: string;
+  message?: string;
+}
+
+function isAuthenticationFailure(error: unknown): boolean {
+  const typedError = error as AuthErrorLike | null;
+  if (!typedError) {
+    return false;
+  }
+
+  if (typedError.status === 401) {
+    return true;
+  }
+
+  if (typedError.code === "UNAUTHORIZED") {
+    return true;
+  }
+
+  return /unauthorized|invalid or missing authentication token/i.test(typedError.message || "");
+}
+
+function hydrateUserFromToken(): User | null {
+  const accessToken = authService.getAccessToken();
+  if (!accessToken) {
+    return null;
+  }
+
+  const payload = authService.decodeToken(accessToken);
+  if (!payload?.sub) {
+    return null;
+  }
+
+  return {
+    id: payload.sub,
+    email: payload.email || "",
+    fullName: payload.fullName || payload.email || "User",
+    role: payload.role || "USER",
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -72,8 +114,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error("Auth initialization failed:", error);
-        authService.clearTokens();
-        setUser(null);
+
+        if (isAuthenticationFailure(error)) {
+          authService.clearTokens();
+          setUser(null);
+        } else {
+          setUser(hydrateUserFromToken());
+        }
+
         setSubscription(null);
       } finally {
         setIsLoading(false);

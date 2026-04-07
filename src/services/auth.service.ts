@@ -36,14 +36,26 @@ export interface UserProfile {
 
 interface ApiErrorShape {
   message?: string;
+  code?: string;
 }
 
-async function parseAuthError(response: Response, fallback: string): Promise<Error> {
+export class AuthServiceError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code?: string,
+  ) {
+    super(message);
+    this.name = "AuthServiceError";
+  }
+}
+
+async function parseAuthError(response: Response, fallback: string): Promise<AuthServiceError> {
   try {
     const error = (await response.json()) as ApiErrorShape;
-    return new Error(error.message || fallback);
+    return new AuthServiceError(error.message || fallback, response.status, error.code);
   } catch {
-    return new Error(fallback);
+    return new AuthServiceError(fallback, response.status);
   }
 }
 

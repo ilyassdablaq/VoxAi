@@ -14,11 +14,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { userService } from "@/services/user.service";
 import { useAuth } from "@/hooks/use-auth";
 import { subscriptionService } from "@/services/subscription.service";
+import { ApiError } from "@/lib/api-client";
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -27,10 +28,45 @@ export default function Profile() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmCancelPlan, setConfirmCancelPlan] = useState(false);
 
-  const { data: profile, isLoading } = useQuery({
+  const {
+    data: profile,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ["my-profile"],
     queryFn: () => userService.getMyProfile(),
+    retry: (failureCount, queryError) => {
+      if (queryError instanceof ApiError && queryError.isUnauthorized()) {
+        return false;
+      }
+
+      return failureCount < 1;
+    },
   });
+
+  useEffect(() => {
+    if (!isError || !error) {
+      return;
+    }
+
+    if (error instanceof ApiError && error.isUnauthorized()) {
+      logout();
+      toast({
+        title: "Session expired",
+        description: "Please sign in again to continue.",
+      });
+      navigate("/sign-in", { replace: true });
+      return;
+    }
+
+    toast({
+      title: "Unable to load profile",
+      description: error instanceof Error ? error.message : "Please try again.",
+      variant: "destructive",
+    });
+  }, [error, isError, logout, navigate, toast]);
 
   const deleteAccountMutation = useMutation({
     mutationFn: () => userService.deleteMyAccount(),
@@ -84,6 +120,13 @@ export default function Profile() {
                 <Skeleton className="h-10 w-full" />
                 <Skeleton className="h-10 w-full" />
                 <Skeleton className="h-10 w-full" />
+              </div>
+            ) : isError ? (
+              <div className="space-y-3 rounded-md border border-border p-4">
+                <p className="text-sm text-muted-foreground">We couldn&apos;t load your profile details.</p>
+                <Button variant="outline" onClick={() => void refetch()}>
+                  Retry
+                </Button>
               </div>
             ) : (
               <>

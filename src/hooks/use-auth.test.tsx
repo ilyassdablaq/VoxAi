@@ -8,6 +8,7 @@ vi.mock("@/services/auth.service", () => ({
     getAccessToken: vi.fn(),
     getRefreshToken: vi.fn(),
     isLoggedIn: vi.fn(),
+    decodeToken: vi.fn(),
     refreshTokens: vi.fn(),
     getCurrentUser: vi.fn(),
     setTokens: vi.fn(),
@@ -106,13 +107,11 @@ describe("useAuth Hook", () => {
       expect(result.current.user).toEqual(mockUser);
     });
 
-    it("should clear tokens and set user to null if initialization fails", async () => {
+    it("should clear tokens and set user to null on unauthorized initialization failure", async () => {
       vi.mocked(authService.getAccessToken).mockReturnValue("access-token");
       vi.mocked(authService.getRefreshToken).mockReturnValue("refresh-token");
       vi.mocked(authService.isLoggedIn).mockReturnValue(true);
-      vi.mocked(authService.getCurrentUser).mockRejectedValue(
-        new Error("Auth failed")
-      );
+      vi.mocked(authService.getCurrentUser).mockRejectedValue({ status: 401, message: "Unauthorized" });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -123,6 +122,30 @@ describe("useAuth Hook", () => {
       expect(vi.mocked(authService.clearTokens)).toHaveBeenCalled();
       expect(result.current.user).toBeNull();
       expect(result.current.isLoggedIn).toBe(false);
+    });
+
+    it("should preserve token-based user on transient initialization failure", async () => {
+      vi.mocked(authService.getAccessToken).mockReturnValue("access-token");
+      vi.mocked(authService.getRefreshToken).mockReturnValue("refresh-token");
+      vi.mocked(authService.isLoggedIn).mockReturnValue(true);
+      vi.mocked(authService.getCurrentUser).mockRejectedValue(new Error("Network error"));
+      vi.mocked(authService.decodeToken).mockReturnValue({
+        sub: "user-123",
+        email: "test@example.com",
+        fullName: "Test User",
+        role: "USER",
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      });
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(vi.mocked(authService.clearTokens)).not.toHaveBeenCalled();
+      expect(result.current.user).toEqual(mockUser);
+      expect(result.current.isLoggedIn).toBe(true);
     });
   });
 
