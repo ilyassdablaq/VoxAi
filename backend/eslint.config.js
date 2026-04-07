@@ -11,11 +11,19 @@ export default tseslint.config(
     files: ["src/**/*.ts"],
     languageOptions: {
       parserOptions: {
-        project: "./tsconfig.json",
+        project: "./tsconfig.eslint.json",
       },
     },
     rules: {
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
       "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
+    files: ["src/**/*.test.ts", "src/test/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": "off",
     },
   },
 );

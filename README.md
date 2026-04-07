@@ -198,10 +198,37 @@ npm run lint
 ### Resend Setup
 
 1. Create and verify a sending domain in Resend.
-2. Set `RESEND_API_KEY` and `EMAIL_FROM` in `backend/.env`.
-3. Set `APP_ORIGIN` to your frontend URL so reset links are correct.
-4. Optionally set `RESET_PASSWORD_PATH` if your reset route changes.
-5. Add `RESEND_WEBHOOK_SECRET` to verify incoming webhook signatures.
+2. Set these variables in `backend/.env`:
+
+```env
+RESEND_API_KEY=re_xxx
+EMAIL_FROM=onboarding@your-domain.com
+CONTACT_RECEIVER_EMAIL=support@your-domain.com
+EMAIL_TEST_TO=your-fixed-test-recipient@example.com
+RESEND_WEBHOOK_SECRET=whsec_xxx
+```
+
+3. `RESEND_API_KEY` and `EMAIL_FROM` are validated at startup (except in test).
+4. Set `APP_ORIGIN` to your frontend URL so reset links are correct.
+5. Optionally set `RESET_PASSWORD_PATH` if your reset route changes.
+
+### Render Production Configuration
+
+1. Open your backend service in Render.
+2. Go to Environment and add:
+	- `RESEND_API_KEY`
+	- `EMAIL_FROM`
+	- `CONTACT_RECEIVER_EMAIL`
+	- `EMAIL_TEST_TO`
+3. Save changes and trigger a redeploy/restart.
+4. Check logs for `Resend email client configured` and confirm the API key is only shown as a masked preview.
+
+### Test Email Endpoint
+
+- Endpoint: `POST /api/contact/test-email`
+- Access: authenticated `ADMIN` user only
+- Behavior: sends a test email to `EMAIL_TEST_TO`
+- Response includes provider message id for tracking
 
 ### Resend Webhook (Delivery Status)
 

@@ -71,6 +71,7 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
+  EMAIL_TEST_TO: z.string().email().optional(),
   RESET_PASSWORD_PATH: z.string().default("/reset-password"),
   CONTACT_RECEIVER_EMAIL: z.string().email().optional(),
 });
@@ -78,6 +79,24 @@ const envSchema = z.object({
 const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {
   throw new Error(`Invalid environment configuration: ${parsed.error.message}`);
+}
+
+if (parsed.data.NODE_ENV !== "test") {
+  const missingEmailVars: string[] = [];
+
+  if (!parsed.data.RESEND_API_KEY) {
+    missingEmailVars.push("RESEND_API_KEY");
+  }
+
+  if (!parsed.data.EMAIL_FROM) {
+    missingEmailVars.push("EMAIL_FROM");
+  }
+
+  if (missingEmailVars.length > 0) {
+    throw new Error(
+      `Invalid environment configuration: missing required email variables: ${missingEmailVars.join(", ")}`,
+    );
+  }
 }
 
 export const env = parsed.data;

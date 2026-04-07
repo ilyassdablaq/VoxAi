@@ -2,7 +2,7 @@ const SECRET_PATTERNS: RegExp[] = [
   /sk-[a-zA-Z0-9]{20,}/g,
   /rk_[a-zA-Z0-9]{20,}/g,
   /xox[baprs]-[a-zA-Z0-9-]{10,}/g,
-  /(?:api[_-]?key|token|password|secret)\s*[:=]\s*['\"]?[a-zA-Z0-9_\-]{8,}['\"]?/gi,
+  /(?:api[_-]?key|token|password|secret)\s*[:=]\s*['"]?[a-zA-Z0-9_-]{8,}['"]?/gi,
 ];
 
 const INJECTION_PATTERNS: RegExp[] = [

@@ -13,15 +13,23 @@ export class ContactService {
     });
 
     try {
-      await emailService.sendContactNotification({
+      const providerMessageId = await emailService.sendContactNotification({
         name: message.name,
         email: message.email,
         company: message.company ?? undefined,
         message: message.message,
         createdAt: message.createdAt,
       });
+
+      logger.info(
+        {
+          contactMessageId: message.id,
+          providerMessageId,
+        },
+        "Contact notification email sent",
+      );
     } catch (error) {
-      logger.error({ err: error }, "Failed to send contact notification email");
+      logger.error({ err: error, contactMessageId: message.id }, "Failed to send contact notification email");
     }
 
     return message;

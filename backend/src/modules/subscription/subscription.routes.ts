@@ -40,7 +40,7 @@ export async function subscriptionRoutes(fastify: FastifyInstance): Promise<void
   // Get all available plans
   fastify.get(
     "/api/subscriptions/available",
-    async (request) => {
+    async () => {
       return service.getAvailablePlans();
     }
   );

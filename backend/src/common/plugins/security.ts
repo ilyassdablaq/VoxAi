@@ -45,7 +45,7 @@ export async function registerSecurityPlugins(fastify: FastifyInstance): Promise
   });
 
   // Plan-based rate limiting for authenticated requests
-  fastify.addHook("preHandler", async (request, reply) => {
+  fastify.addHook("preHandler", async (request, _reply) => {
     const user = request.user as { sub?: string; type?: string; apiKeyId?: string } | undefined;
 
     // Skip rate limit check for public endpoints

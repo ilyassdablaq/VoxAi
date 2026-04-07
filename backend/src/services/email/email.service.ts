@@ -10,6 +10,15 @@ interface ContactNotificationPayload {
   createdAt: Date;
 }
 
+interface PasswordResetPayload {
+  email: string;
+  resetLink: string;
+}
+
+interface TestEmailPayload {
+  triggeredBy: string;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -20,32 +29,90 @@ function escapeHtml(value: string): string {
 }
 
 export class EmailService {
-  private client: Resend | null = null;
+  private readonly client: Resend | null;
   private readonly receiverEmail: string | null;
   private readonly fromEmail: string | null;
-  private readonly isConfigured: boolean;
+  private readonly testToEmail: string | null;
 
   constructor() {
     this.receiverEmail = env.CONTACT_RECEIVER_EMAIL ?? null;
     this.fromEmail = env.EMAIL_FROM ?? null;
-    this.isConfigured = Boolean(env.RESEND_API_KEY) && Boolean(this.fromEmail);
+    this.testToEmail = env.EMAIL_TEST_TO ?? null;
 
-    if (!this.isConfigured) {
-      logger.warn("Resend not fully configured. Emails will not be sent, only stored in database.");
-      return;
+    if (!env.RESEND_API_KEY || !this.fromEmail) {
+      this.client = null;
+
+      if (env.NODE_ENV === "test") {
+        logger.debug("Resend disabled in test environment due to missing key or sender");
+        return;
+      }
+
+      throw new Error("Email service misconfigured: RESEND_API_KEY and EMAIL_FROM are required");
     }
 
     this.client = new Resend(env.RESEND_API_KEY);
-    logger.info("Resend email client configured");
+
+    const keyPreview = `${env.RESEND_API_KEY.slice(0, 3)}...${env.RESEND_API_KEY.slice(-4)}`;
+    logger.info(
+      {
+        resendApiKeyPreview: keyPreview,
+        hasContactReceiver: Boolean(this.receiverEmail),
+        hasTestRecipient: Boolean(this.testToEmail),
+      },
+      "Resend email client configured",
+    );
   }
 
-  async sendContactNotification(payload: ContactNotificationPayload): Promise<void> {
-    if (!this.client || !this.receiverEmail || !this.fromEmail) {
-      return;
+  private ensureClient(): Resend {
+    if (!this.client) {
+      throw new Error("Resend client unavailable. Configure RESEND_API_KEY and EMAIL_FROM");
     }
 
-    await this.client.emails.send({
-      from: this.fromEmail,
+    return this.client;
+  }
+
+  private async sendEmail(
+    kind: "contact_notification" | "password_reset" | "integration_test",
+    payload: Parameters<Resend["emails"]["send"]>[0],
+  ): Promise<string> {
+    if (!this.client && env.NODE_ENV === "test") {
+      logger.debug({ emailKind: kind }, "Skipping outbound email in test environment");
+      return "test-noop";
+    }
+
+    const client = this.ensureClient();
+
+    try {
+      const response = await client.emails.send(payload);
+
+      if (response.error) {
+        logger.error(
+          {
+            emailKind: kind,
+            resendError: response.error,
+          },
+          "Resend API returned an error",
+        );
+
+        throw new Error(`Resend API error: ${response.error.message ?? "unknown"}`);
+      }
+
+      const providerMessageId = response.data?.id ?? "unknown";
+      logger.info({ emailKind: kind, providerMessageId }, "Email request sent successfully via Resend");
+      return providerMessageId;
+    } catch (error) {
+      logger.error({ err: error, emailKind: kind }, "Failed to send email via Resend");
+      throw error;
+    }
+  }
+
+  async sendContactNotification(payload: ContactNotificationPayload): Promise<string> {
+    if (!this.receiverEmail) {
+      throw new Error("Email service misconfigured: CONTACT_RECEIVER_EMAIL is required for contact notifications");
+    }
+
+    return this.sendEmail("contact_notification", {
+      from: this.fromEmail as string,
       to: this.receiverEmail,
       replyTo: payload.email,
       subject: `New contact request from ${payload.name}`,
@@ -64,18 +131,14 @@ export class EmailService {
         `<p><strong>Company:</strong> ${escapeHtml(payload.company || "-")}</p>`,
         `<p><strong>Created At:</strong> ${payload.createdAt.toISOString()}</p>`,
         "<hr />",
-        `<p style=\"white-space: pre-wrap;\">${escapeHtml(payload.message)}</p>`,
+        `<p style="white-space: pre-wrap;">${escapeHtml(payload.message)}</p>`,
       ].join(""),
     });
   }
 
-  async sendPasswordResetEmail(payload: { email: string; resetLink: string }): Promise<void> {
-    if (!this.client || !this.fromEmail) {
-      return;
-    }
-
-    await this.client.emails.send({
-      from: this.fromEmail,
+  async sendPasswordResetEmail(payload: PasswordResetPayload): Promise<string> {
+    return this.sendEmail("password_reset", {
+      from: this.fromEmail as string,
       to: payload.email,
       subject: "Reset your VoxFlow password",
       text: [
@@ -88,9 +151,36 @@ export class EmailService {
         "<div style=\"font-family: Arial, sans-serif; color: #111; line-height: 1.5;\">",
         "<h2 style=\"margin-bottom: 12px;\">Reset your password</h2>",
         "<p>We received a request to reset your password.</p>",
-        `<p><a href=\"${escapeHtml(payload.resetLink)}\" style=\"display:inline-block;padding:10px 16px;background:#111;color:#fff;text-decoration:none;border-radius:6px;\">Reset password</a></p>`,
-        `<p>If the button does not work, use this link:<br /><a href=\"${escapeHtml(payload.resetLink)}\">${escapeHtml(payload.resetLink)}</a></p>`,
+        `<p><a href="${escapeHtml(payload.resetLink)}" style="display:inline-block;padding:10px 16px;background:#111;color:#fff;text-decoration:none;border-radius:6px;">Reset password</a></p>`,
+        `<p>If the button does not work, use this link:<br /><a href="${escapeHtml(payload.resetLink)}">${escapeHtml(payload.resetLink)}</a></p>`,
         "<p>This link expires in 1 hour. If you did not request this, you can ignore this email.</p>",
+        "</div>",
+      ].join(""),
+    });
+  }
+
+  async sendIntegrationTestEmail(payload: TestEmailPayload): Promise<string> {
+    if (!this.testToEmail) {
+      throw new Error("Email service misconfigured: EMAIL_TEST_TO is required for integration test email");
+    }
+
+    const sentAt = new Date().toISOString();
+
+    return this.sendEmail("integration_test", {
+      from: this.fromEmail as string,
+      to: this.testToEmail,
+      subject: "VoxAI Resend integration test",
+      text: [
+        "This is a Resend integration test email from VoxAI backend.",
+        `Triggered by: ${payload.triggeredBy}`,
+        `Sent at: ${sentAt}`,
+      ].join("\n"),
+      html: [
+        "<div style=\"font-family: Arial, sans-serif; color: #111; line-height: 1.5;\">",
+        "<h2>Resend integration test</h2>",
+        "<p>This is a Resend integration test email from VoxAI backend.</p>",
+        `<p><strong>Triggered by:</strong> ${escapeHtml(payload.triggeredBy)}</p>`,
+        `<p><strong>Sent at:</strong> ${sentAt}</p>`,
         "</div>",
       ].join(""),
     });
