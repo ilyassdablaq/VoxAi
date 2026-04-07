@@ -4,25 +4,10 @@ import { subscriptionService } from "@/services/subscription.service";
 import { identifyUser, resetUserIdentity } from "@/lib/product-analytics";
 
 export interface Subscription {
-  id: string;
-  userId: string;
-  planId: string;
-  status: string;
-  startsAt: string;
-  endsAt: string | null;
-  plan: Plan;
-}
-
-export interface Plan {
-  id: string;
-  key: string;
-  name: string;
-  type: "FREE" | "PRO" | "ENTERPRISE";
-  interval: "MONTHLY" | "YEARLY";
-  priceCents: number;
-  voiceMinutes: number;
-  tokenLimit: number;
-  features: Record<string, unknown>;
+  plan: "FREE" | "PRO" | "ENTERPRISE";
+  effectivePlan: "FREE" | "PRO" | "ENTERPRISE";
+  isOverride: boolean;
+  overrideExpiresAt: string | null;
 }
 
 export interface User {
@@ -162,8 +147,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const isPro =
-    subscription?.plan.type === "PRO" ||
-    subscription?.plan.type === "ENTERPRISE";
+    subscription?.effectivePlan === "PRO" ||
+    subscription?.effectivePlan === "ENTERPRISE";
 
   return (
     <AuthContext.Provider

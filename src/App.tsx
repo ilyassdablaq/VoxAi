@@ -7,6 +7,7 @@ import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ProFeatureRoute } from "./components/ProFeatureRoute";
+import { AdminRoute } from "./components/AdminRoute";
 
 const Index = lazy(() => import("./pages/Index.tsx"));
 const Features = lazy(() => import("./pages/Features"));
@@ -27,6 +28,7 @@ const VoiceSettings = lazy(() => import("./pages/VoiceSettings"));
 const DeveloperPortal = lazy(() => import("./pages/DeveloperPortal"));
 const DashboardFaq = lazy(() => import("./pages/DashboardFaq"));
 const Profile = lazy(() => import("./pages/Profile"));
+const Admin = lazy(() => import("./pages/Admin"));
 const StripeSuccess = lazy(() => import("./pages/StripeSuccess").then((module) => ({ default: module.StripeSuccess })));
 const StripeCancel = lazy(() => import("./pages/StripeCancel").then((module) => ({ default: module.StripeCancel })));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -141,6 +143,16 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Profile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dashboard/admin"
+                element={
+                  <ProtectedRoute>
+                    <AdminRoute>
+                      <Admin />
+                    </AdminRoute>
                   </ProtectedRoute>
                 }
               />

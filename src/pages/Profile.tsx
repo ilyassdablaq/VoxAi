@@ -111,11 +111,14 @@ export default function Profile() {
           <CardContent className="space-y-4">
             <div className="rounded-md border border-border p-3">
               <p className="text-xs text-muted-foreground">Current Subscription</p>
-              <p className="text-sm font-medium">{subscription?.plan?.name ?? "Free"}</p>
+              <p className="text-sm font-medium">
+                {subscription?.plan ?? "FREE"}
+                {subscription?.isOverride ? " (effective override active)" : ""}
+              </p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
-              {subscription?.plan?.key !== "free" ? (
+              {subscription?.plan !== "FREE" ? (
                 <Button
                   variant="secondary"
                   onClick={() => setConfirmCancelPlan(true)}

@@ -14,7 +14,7 @@ export function requiresPlan(minPlanType: PlanType) {
       throw new AppError(401, 'UNAUTHORIZED', 'User not authenticated');
     }
 
-    const userPlan = await planCheckService.getUserPlan(userId);
+    const userPlan = await planCheckService.getEffectivePlanAccess(userId);
 
     // Plan hierarchy check
     const planHierarchy: Record<PlanType, number> = {

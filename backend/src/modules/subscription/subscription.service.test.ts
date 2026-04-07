@@ -7,6 +7,13 @@ import { AppError } from "@/common/errors/app-error";
 
 vi.mock("@/infra/database/prisma", () => ({
   prisma: {
+    adminPlanOverride: {
+      updateMany: vi.fn(),
+      findFirst: vi.fn(),
+    },
+    plan: {
+      findFirst: vi.fn(),
+    },
     subscription: {
       updateMany: vi.fn(),
       findFirst: vi.fn(),
@@ -44,6 +51,16 @@ describe("SubscriptionService", () => {
 
     vi.mocked(PlanService).mockImplementation(() => mockPlanService as any);
 
+    vi.mocked(prisma.adminPlanOverride.updateMany).mockResolvedValue({ count: 0 } as never);
+    vi.mocked(prisma.adminPlanOverride.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.plan.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.subscription.findFirst).mockResolvedValue({
+      plan: {
+        type: "FREE",
+        key: "free",
+      },
+    } as never);
+
     subscriptionService = new SubscriptionService(mockRepository);
   });
 
@@ -62,8 +79,10 @@ describe("SubscriptionService", () => {
 
       const result = await subscriptionService.getCurrentSubscription(testFixtures.user.id);
 
-      expect(result.plan.key).toBe("free");
-      expect(result.status).toBe("ACTIVE");
+      expect(result.plan).toBe("FREE");
+      expect(result.effectivePlan).toBe("FREE");
+      expect(result.isOverride).toBe(false);
+      expect(result.overrideExpiresAt).toBeNull();
       expect(mockRepository.ensureDefaultFreePlanSubscription).toHaveBeenCalledWith(
         testFixtures.user.id
       );

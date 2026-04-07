@@ -8,8 +8,11 @@ import { prisma } from "../../infra/database/prisma.js";
 import { rateLimitService } from "../services/plan-rate-limit.service.js";
 import { AppError } from "../errors/app-error.js";
 import { logger } from "../../config/logger.js";
+import { PlanCheckService } from "../services/plan-check.service.js";
 
 export async function registerSecurityPlugins(fastify: FastifyInstance): Promise<void> {
+  const planCheckService = new PlanCheckService();
+
   await fastify.register(helmet, {
     global: true,
     contentSecurityPolicy: false,
@@ -67,18 +70,8 @@ export async function registerSecurityPlugins(fastify: FastifyInstance): Promise
           planType = apiKey.user.subscriptions[0].plan.type;
         }
       } else {
-        // Look up user's subscription plan
-        const subscription = await prisma.subscription.findFirst({
-          where: {
-            userId: user.sub,
-            status: "ACTIVE",
-          },
-          include: { plan: true },
-        });
-
-        if (subscription?.plan) {
-          planType = subscription.plan.type;
-        }
+        const effectivePlan = await planCheckService.getEffectivePlanAccess(user.sub);
+        planType = effectivePlan.type;
       }
 
       const principal = user.type === "api_key" ? `api-key:${user.apiKeyId}` : `user:${user.sub}`;

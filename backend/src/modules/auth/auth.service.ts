@@ -144,10 +144,14 @@ export class AuthService {
     const resetUrl = new URL(resetPath, env.APP_ORIGIN);
     resetUrl.searchParams.set("token", resetToken);
 
-    await emailService.sendPasswordResetEmail({
-      email: user.email,
-      resetLink: resetUrl.toString(),
-    });
+    try {
+      await emailService.sendPasswordResetEmail({
+        email: user.email,
+        resetLink: resetUrl.toString(),
+      });
+    } catch (error) {
+      logger.error({ error, email: user.email }, "Failed to send password reset email");
+    }
 
     logger.info({ email: user.email }, "Password reset token issued");
   }

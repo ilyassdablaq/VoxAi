@@ -17,4 +17,23 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "react-core": ["react", "react-dom", "react-router-dom"],
+          "react-query": ["@tanstack/react-query"],
+          "charts-motion": ["recharts", "framer-motion"],
+          "ui-vendor": [
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-dropdown-menu",
+            "@radix-ui/react-navigation-menu",
+            "@radix-ui/react-tooltip",
+            "lucide-react",
+          ],
+        },
+      },
+    },
+  },
 });

@@ -84,7 +84,7 @@ export function UpgradeModal({
 
         {subscription && (
           <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-            Current plan: <span className="font-medium text-foreground">{subscription.plan.name}</span>
+            Current effective plan: <span className="font-medium text-foreground">{subscription.effectivePlan}</span>
           </div>
         )}
 

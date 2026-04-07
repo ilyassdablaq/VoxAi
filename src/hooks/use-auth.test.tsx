@@ -35,36 +35,15 @@ describe("useAuth Hook", () => {
   };
 
   const mockSubscription = {
-    id: "sub-123",
-    userId: "user-123",
-    planId: "plan-free",
-    status: "ACTIVE",
-    startsAt: "2024-01-01T00:00:00Z",
-    endsAt: null,
-    plan: {
-      id: "plan-free",
-      key: "free",
-      name: "Free",
-      type: "FREE" as const,
-      interval: "MONTHLY" as const,
-      priceCents: 0,
-      voiceMinutes: 60,
-      tokenLimit: 10000,
-      features: {},
-    },
+    plan: "FREE" as const,
+    effectivePlan: "FREE" as const,
+    isOverride: false,
+    overrideExpiresAt: null,
   };
 
   const mockProSubscription = {
     ...mockSubscription,
-    plan: {
-      ...mockSubscription.plan,
-      type: "PRO" as const,
-      key: "pro",
-      name: "Pro",
-      priceCents: 9900,
-      voiceMinutes: 5000,
-      tokenLimit: 100000,
-    },
+    effectivePlan: "PRO" as const,
   };
 
   const wrapper = ({ children }: { children: ReactNode }) => (
