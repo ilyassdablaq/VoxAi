@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { userService } from "@/services/user.service";
 import { useAuth } from "@/hooks/use-auth";
@@ -27,12 +27,14 @@ export default function Profile() {
   const { logout, subscription, refreshSubscription } = useAuth();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmCancelPlan, setConfirmCancelPlan] = useState(false);
+  const handledErrorAtRef = useRef<number | null>(null);
 
   const {
     data: profile,
     isLoading,
     isError,
     error,
+    errorUpdatedAt,
     refetch,
   } = useQuery({
     queryKey: ["my-profile"],
@@ -47,6 +49,17 @@ export default function Profile() {
   });
 
   useEffect(() => {
+    if (!isError) {
+      handledErrorAtRef.current = null;
+      return;
+    }
+
+    if (!error || handledErrorAtRef.current === errorUpdatedAt) {
+      return;
+    }
+
+    handledErrorAtRef.current = errorUpdatedAt;
+
     if (!isError || !error) {
       return;
     }
@@ -66,7 +79,7 @@ export default function Profile() {
       description: error instanceof Error ? error.message : "Please try again.",
       variant: "destructive",
     });
-  }, [error, isError, logout, navigate, toast]);
+  }, [error, errorUpdatedAt, isError, logout, navigate, toast]);
 
   const deleteAccountMutation = useMutation({
     mutationFn: () => userService.deleteMyAccount(),
