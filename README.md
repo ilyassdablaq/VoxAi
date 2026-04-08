@@ -266,6 +266,86 @@ Recommended webhook event subscriptions in Resend:
 2. Add `VITE_POSTHOG_KEY` and `VITE_POSTHOG_HOST` to root `.env`.
 3. Run frontend and verify events in PostHog live events.
 
+## RAG Service (Retrieval-Augmented Generation)
+
+The RAG service (`backend/src/services/rag/rag.service.ts`) enables VoxFlow to answer questions grounded in documents you upload or websites you crawl. The pipeline has two phases: **Ingestion** (storing knowledge) and **Retrieval** (finding relevant context at query time).
+
+### Ingestion Pipeline
+
+1. **Input handling** – Documents can be provided in four ways:
+   - Base64-encoded file uploads (plain text or PDF)
+   - Raw file buffers sent as multipart/form-data (plain text or PDF)
+   - Structured data payloads (JSON or XML)
+   - Website URLs (crawled up to a configurable `maxPages` limit)
+
+2. **Text extraction** – PDFs are parsed with `pdf-parse`. HTML pages are fetched by a built-in crawler (using `cheerio`) that strips `<script>`, `<style>`, and non-content elements, then prefers semantic containers (`<main>`, `<article>`, `.content`, etc.) over the full `<body>`. JSON and XML are recursively flattened into `path: value` lines.
+
+3. **Chunking** – Extracted text is split into overlapping chunks of **400 words** with a **70-word overlap** (constants `CHUNK_WORDS` / `CHUNK_OVERLAP_WORDS`). The overlap ensures context is not lost at chunk boundaries.
+
+4. **Embedding** – Each chunk is converted to a **1536-dimensional vector** via OpenAI `text-embedding-3-small`. When `OPENAI_API_KEY` is absent a deterministic SHA-256 pseudo-embedding is used as a fallback, which is useful for development and CI. Embedding requests are batched in groups of **4** (`EMBEDDING_CONCURRENCY`) to respect API rate limits.
+
+5. **Persistence** – Chunks and their vectors are stored in PostgreSQL with the `pgvector` extension. The `KnowledgeDocument` record and all its `KnowledgeChunk` rows are written atomically inside a single `$transaction`. A document failure therefore never leaves orphaned chunks.
+
+### Retrieval Pipeline
+
+1. **Query embedding** – The user's question is embedded with the same model used during ingest.
+
+2. **Vector similarity search** – A parameterised raw SQL query uses pgvector's `<->` cosine-distance operator to return the **top-k nearest chunks** (`topK` defaults to `4`) that belong to the requesting user:
+
+   ```sql
+   SELECT kc."chunkText" as chunk_text
+   FROM "KnowledgeChunk" kc
+   INNER JOIN "KnowledgeDocument" kd ON kd.id = kc."documentId"
+   WHERE kd."userId" = $1
+   ORDER BY kc.embedding <-> $2::vector
+   LIMIT $3
+   ```
+
+3. **In-memory cache** – Results are cached per `(userId, normalized-query-hash, topK)` for **45 seconds** (`RETRIEVAL_CACHE_TTL_MS`). The cache is bounded at **1000 entries** (`RETRIEVAL_CACHE_MAX_ITEMS`). It is automatically invalidated for a specific user whenever one of that user's documents is deleted.
+
+4. **Prompt construction** – Retrieved chunks are assembled into a guarded system prompt via `buildPrompt()`. The prompt:
+   - Instructs the LLM to use only the provided context when it is relevant.
+   - Treats context as untrusted data and ignores embedded instructions (prompt-injection protection).
+   - Forbids revealing hidden system prompts, credentials, or secrets.
+   - Falls back gracefully to `"No relevant context found."` when the knowledge base returns nothing relevant.
+
+### Required Environment Variable
+
+| Variable | Purpose |
+|---|---|
+| `OPENAI_API_KEY` | Production-quality embeddings via `text-embedding-3-small`. If absent the pseudo-embedding fallback is used automatically. |
+
+---
+
+## Evaluation Methods
+
+The RAG service is validated through a comprehensive unit test suite at `backend/src/services/rag/rag.service.test.ts`. Tests run with **Vitest** and use mocked Prisma and logger dependencies so no real database or network connection is required.
+
+### Test Scenarios
+
+| Test | What it verifies |
+|---|---|
+| **Top-k retrieval & tenant SQL filter** | `retrieveContext` passes `userId` as a parameterised SQL argument (`WHERE kd."userId" = $1`) and returns results as a plain string array. |
+| **Retrieval cache hit** | Two calls with the same user and whitespace-normalized query result in only one database round-trip. |
+| **Cache isolation between tenants** | Two different users asking the same question each trigger a separate database query and receive independent results, proving cache keys are tenant-scoped. |
+| **Prompt fallback (no context)** | `buildPrompt` with an empty context array outputs the literal `"No relevant context found."` string. |
+| **Prompt with multiple chunks** | Multiple context chunks are joined with double newlines and placed in the correct order in the final prompt. |
+| **Empty file rejection** | A zero-byte base64 upload is rejected with `AppError { statusCode: 400, code: "EMPTY_FILE" }`. |
+| **Invalid JSON rejection** | Malformed JSON passed to `ingestStructuredData` is rejected with `AppError { statusCode: 400, code: "STRUCTURED_PARSE_FAILED" }`. |
+| **Cache invalidation on delete** | After deleting a document the next retrieval call hits the database again instead of returning stale cached data. |
+| **Document-not-found on delete** | Attempting to delete a non-existent document ID throws `AppError { statusCode: 404, code: "DOCUMENT_NOT_FOUND" }`. |
+| **Storage failure wrapping** | A simulated database crash during `$transaction` is wrapped and re-thrown as `AppError { statusCode: 500, code: "CHUNK_STORE_FAILED" }`. |
+| **AppError passthrough** | When the storage layer itself throws an `AppError`, the original error is re-thrown unchanged without extra wrapping. |
+
+### Running the RAG Tests
+
+```bash
+cd backend
+npm run test -- --reporter=verbose rag.service
+```
+
+---
+
 ## Production Notes
 
 - Use strong secrets for JWT and external providers
