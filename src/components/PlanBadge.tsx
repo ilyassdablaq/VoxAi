@@ -5,11 +5,14 @@ import { cn } from '@/lib/utils';
  * PlanBadge component - displays current plan in header/nav
  */
 export function PlanBadge() {
-  const { subscription, isPro } = useAuth();
+  const { subscription, isPro, isLoading } = useAuth();
 
-  if (!subscription) {
+  if (isLoading) {
     return <div className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded">Loading...</div>;
   }
+
+  const effectivePlan = subscription?.effectivePlan ?? "FREE";
+  const isOverride = subscription?.isOverride ?? false;
 
   return (
     <div
@@ -20,7 +23,7 @@ export function PlanBadge() {
           : 'bg-gray-100 text-gray-700'
       )}
     >
-      {subscription.effectivePlan}{subscription.isOverride ? " (override)" : ""}
+      {effectivePlan}{isOverride ? " (override)" : ""}
     </div>
   );
 }
