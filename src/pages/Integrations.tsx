@@ -11,6 +11,15 @@ import { integrationService } from "@/services/integration.service";
 import { API_BASE } from "@/lib/api-config";
 import { ChatWidgetPreview } from "@/components/integrations/ChatWidgetPreview";
 
+const THEME_PRESETS = [
+  { label: "Indigo", value: "#5A67D8" },
+  { label: "Ocean", value: "#0EA5E9" },
+  { label: "Emerald", value: "#10B981" },
+  { label: "Rose", value: "#F43F5E" },
+  { label: "Amber", value: "#F59E0B" },
+  { label: "Slate", value: "#334155" },
+];
+
 export default function Integrations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -37,21 +46,31 @@ export default function Integrations() {
   }, [data]);
 
   const effectiveData = useMemo(() => {
+    const nextBotName = (botName || data?.botName || "Chatbot").trim();
+    const nextTheme = (themeColor || data?.themeColor || "#5A67D8").trim();
+
     return data
       ? {
           ...data,
-          botName: botName || data.botName,
-          themeColor: themeColor || data.themeColor,
+          botName: nextBotName,
+          themeColor: nextTheme,
           position,
           language,
         }
       : null;
   }, [botName, data, language, position, themeColor]);
 
+  const selectedThemePreset = useMemo(() => {
+    const normalized = (themeColor || data?.themeColor || "").toLowerCase();
+    return THEME_PRESETS.find((preset) => preset.value.toLowerCase() === normalized)?.value ?? "custom";
+  }, [data?.themeColor, themeColor]);
+
+  const canSave = (botName || data.botName || "").trim().length > 0;
+
   const saveMutation = useMutation({
     mutationFn: () =>
       integrationService.updateSettings({
-        botName: botName || data?.botName || "Assistant",
+        botName: (botName || data?.botName || "Chatbot").trim(),
         themeColor: themeColor || data?.themeColor || "#5A67D8",
         position,
         language,
@@ -121,13 +140,47 @@ export default function Integrations() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Bot Name</label>
-              <Input value={botName || data.botName} onChange={(event) => setBotName(event.target.value)} />
+              <Input
+                value={botName || data.botName}
+                onChange={(event) => setBotName(event.target.value)}
+                placeholder="z. B. VoxFlow Concierge"
+              />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Theme Color</label>
-                <Input value={themeColor || data.themeColor} onChange={(event) => setThemeColor(event.target.value)} />
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                  <select
+                    className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm"
+                    value={selectedThemePreset}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      if (next !== "custom") {
+                        setThemeColor(next);
+                      }
+                    }}
+                  >
+                    {THEME_PRESETS.map((preset) => (
+                      <option key={preset.value} value={preset.value}>
+                        {preset.label}
+                      </option>
+                    ))}
+                    <option value="custom">Custom</option>
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="color"
+                      value={themeColor || data.themeColor}
+                      onChange={(event) => setThemeColor(event.target.value)}
+                      className="h-11 w-14 cursor-pointer p-1"
+                      aria-label="Select widget color"
+                    />
+                    <span className="min-w-[78px] text-xs font-medium text-muted-foreground">
+                      {(themeColor || data.themeColor).toUpperCase()}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -158,7 +211,7 @@ export default function Integrations() {
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="min-h-11">
+              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !canSave} className="min-h-11">
                 {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Save Settings
               </Button>

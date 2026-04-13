@@ -58,7 +58,6 @@ export function ChatWidgetPreview({ botName, themeColor, position, language }: C
           <div className="flex items-center justify-between bg-[linear-gradient(135deg,theme(colors.indigo.600),theme(colors.indigo.500))] px-4 py-3 text-white">
             <div>
               <p className="text-base font-semibold tracking-tight">{botName}</p>
-              <p className="text-xs text-white/80">Assistant</p>
             </div>
             <div className="rounded-full border border-white/15 bg-white/15 px-3 py-1 text-[11px] font-semibold text-white/90">
               Online
@@ -105,7 +104,7 @@ export function ChatWidgetPreview({ botName, themeColor, position, language }: C
           </div>
         </div>
 
-        <div className="absolute bottom-4 right-4 flex items-center gap-3">
+        <div className={cn("absolute bottom-4 flex items-center gap-3", position === "bottom-left" ? "left-4" : "right-4")}>
           <button
             type="button"
             className="flex h-14 w-14 items-center justify-center rounded-full text-sm font-semibold shadow-[0_18px_30px_rgba(15,23,42,0.28)]"
