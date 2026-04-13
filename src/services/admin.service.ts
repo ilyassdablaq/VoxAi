@@ -7,6 +7,20 @@ export interface AdminUserSearchResult {
   role: "USER" | "ADMIN";
 }
 
+export interface AdminAuditLogItem {
+  id: string;
+  adminId: string | null;
+  targetUserId: string | null;
+  action: string;
+  reason: string | null;
+  timestamp: string;
+}
+
+export interface AdminAuditLogResponse {
+  items: AdminAuditLogItem[];
+  total: number;
+}
+
 export interface EffectiveAccessResponse {
   user: {
     id: string;
@@ -54,6 +68,11 @@ export type SetOverridePayload = Record<string, unknown> & {
   reason?: string;
 };
 
+export interface AuditLogQueryParams {
+  limit?: number;
+  offset?: number;
+}
+
 export const adminService = {
   searchUsers(query: string, limit = 10): Promise<AdminUserSearchResult[]> {
     const params = new URLSearchParams({ q: query, limit: String(limit) });
@@ -75,5 +94,20 @@ export const adminService = {
   getOverrideHistory(userId: string, limit = 10): Promise<OverrideHistoryItem[]> {
     const params = new URLSearchParams({ limit: String(limit) });
     return apiClient.get<OverrideHistoryItem[]>(`/api/admin/users/${encodeURIComponent(userId)}/overrides?${params.toString()}`);
+  },
+
+  getAuditLogs(params: AuditLogQueryParams = {}): Promise<AdminAuditLogResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (typeof params.limit === "number") {
+      searchParams.set("limit", String(params.limit));
+    }
+
+    if (typeof params.offset === "number") {
+      searchParams.set("offset", String(params.offset));
+    }
+
+    const query = searchParams.toString();
+    return apiClient.get<AdminAuditLogResponse>(`/api/admin/audit-logs${query ? `?${query}` : ""}`);
   },
 };

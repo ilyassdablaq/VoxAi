@@ -15,6 +15,38 @@ export interface AuditLogEntry {
   userAgent?: string;
 }
 
+export interface AuditLogQueryFilters {
+  action?: string;
+  actionPrefix?: string;
+  resourceType?: string;
+  principalId?: string;
+  principalType?: string;
+  startDate?: Date;
+  endDate?: Date;
+  limit?: number;
+  offset?: number;
+}
+
+function buildWhere(filters: AuditLogQueryFilters) {
+  const { action, actionPrefix, resourceType, principalId, principalType, startDate, endDate } = filters;
+
+  return {
+    ...(action && { action }),
+    ...(actionPrefix && { action: { startsWith: actionPrefix } }),
+    ...(resourceType && { resourceType }),
+    ...(principalId && { principalId }),
+    ...(principalType && { principalType }),
+    ...(startDate || endDate
+      ? {
+          createdAt: {
+            ...(startDate && { gte: startDate }),
+            ...(endDate && { lte: endDate }),
+          },
+        }
+      : {}),
+  };
+}
+
 class AuditLogService {
   async log(entry: AuditLogEntry): Promise<void> {
     try {
@@ -38,33 +70,30 @@ class AuditLogService {
     }
   }
 
-  async queryLogs(
-    filters: {
-      action?: string;
-      resourceType?: string;
-      principalId?: string;
-      principalType?: string;
-      startDate?: Date;
-      endDate?: Date;
-      limit?: number;
-      offset?: number;
-    } = {}
-  ) {
-    const { action, resourceType, principalId, principalType, startDate, endDate, limit = 50, offset = 0 } = filters;
+  async queryLogs(filters: AuditLogQueryFilters = {}) {
+    const { limit = 50, offset = 0 } = filters;
 
     return prisma.auditLog.findMany({
-      where: {
-        ...(action && { action }),
-        ...(resourceType && { resourceType }),
-        ...(principalId && { principalId }),
-        ...(principalType && { principalType }),
-        ...(startDate && { createdAt: { gte: startDate } }),
-        ...(endDate && { createdAt: { lte: endDate } }),
-      },
+      where: buildWhere(filters),
       orderBy: { createdAt: "desc" },
       take: limit,
       skip: offset,
     });
+  }
+
+  async countLogs(filters: AuditLogQueryFilters = {}): Promise<number> {
+    return prisma.auditLog.count({
+      where: buildWhere(filters),
+    });
+  }
+
+  async queryLogsPage(filters: AuditLogQueryFilters = {}) {
+    const [items, total] = await Promise.all([this.queryLogs(filters), this.countLogs(filters)]);
+
+    return {
+      items,
+      total,
+    };
   }
 
   async countCriticalActions(userId: string, action: string, windowHours: number = 24): Promise<number> {

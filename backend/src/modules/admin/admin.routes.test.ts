@@ -7,6 +7,7 @@ const mockSetSubscriptionOverride = vi.fn();
 const mockRemoveSubscriptionOverride = vi.fn();
 const mockGetEffectiveAccess = vi.fn();
 const mockGetOverrideHistory = vi.fn();
+const mockGetAuditLogs = vi.fn();
 
 vi.mock("./admin.service.js", () => ({
   AdminService: vi.fn().mockImplementation(() => ({
@@ -15,6 +16,7 @@ vi.mock("./admin.service.js", () => ({
     removeSubscriptionOverride: mockRemoveSubscriptionOverride,
     getEffectiveAccess: mockGetEffectiveAccess,
     getOverrideHistory: mockGetOverrideHistory,
+    getAuditLogs: mockGetAuditLogs,
   })),
 }));
 
@@ -104,6 +106,41 @@ describe("Admin routes access control", () => {
       "target-user",
       expect.any(Object),
     );
+
+    await app.close();
+  });
+
+  it("returns paginated audit logs for ADMIN", async () => {
+    const app = Fastify();
+    await app.register(jwt, { secret: "test-secret-123456789" });
+    await app.register(adminRoutes);
+
+    mockGetAuditLogs.mockResolvedValue({
+      items: [
+        {
+          id: "audit-1",
+          adminId: "admin-1",
+          targetUserId: "user-1",
+          action: "admin.subscription.override.set",
+          reason: "QA",
+          timestamp: "2026-04-12T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+    });
+
+    const adminToken = app.jwt.sign({ sub: "admin-1", role: "ADMIN" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/admin/audit-logs?limit=5&offset=0",
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockGetAuditLogs).toHaveBeenCalledWith(5, 0);
 
     await app.close();
   });

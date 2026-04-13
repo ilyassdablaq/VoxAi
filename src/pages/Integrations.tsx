@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { integrationService } from "@/services/integration.service";
 import { API_BASE } from "@/lib/api-config";
+import { ChatWidgetPreview } from "@/components/integrations/ChatWidgetPreview";
 
 export default function Integrations() {
   const queryClient = useQueryClient();
@@ -112,36 +113,38 @@ export default function Integrations() {
 
   return (
     <DashboardShell title="Integrations" description="Install your chatbot on any website using an embeddable widget.">
-      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
-        <Card>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)]">
+        <Card className="border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle>Widget Configuration</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm">Bot Name</label>
+              <label className="text-sm font-medium">Bot Name</label>
               <Input value={botName || data.botName} onChange={(event) => setBotName(event.target.value)} />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm">Theme Color</label>
-              <Input value={themeColor || data.themeColor} onChange={(event) => setThemeColor(event.target.value)} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Theme Color</label>
+                <Input value={themeColor || data.themeColor} onChange={(event) => setThemeColor(event.target.value)} />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Position</label>
+                <select
+                  className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm"
+                  value={position || data.position}
+                  onChange={(event) => setPosition(event.target.value as "bottom-right" | "bottom-left")}
+                >
+                  <option value="bottom-right">Bottom Right</option>
+                  <option value="bottom-left">Bottom Left</option>
+                </select>
+              </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm">Position</label>
-              <select
-                className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm"
-                value={position || data.position}
-                onChange={(event) => setPosition(event.target.value as "bottom-right" | "bottom-left")}
-              >
-                <option value="bottom-right">Bottom Right</option>
-                <option value="bottom-left">Bottom Left</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm">Language</label>
+              <label className="text-sm font-medium">Language</label>
               <select
                 className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm"
                 value={language || data.language}
@@ -154,39 +157,57 @@ export default function Integrations() {
               </select>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="min-h-11">
-                {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Save Settings
               </Button>
-              <Button variant="outline" onClick={() => regenerateKeyMutation.mutate()} disabled={regenerateKeyMutation.isPending} className="min-h-11">
-                {regenerateKeyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <KeyRound className="w-4 h-4 mr-2" />}
+              <Button
+                variant="outline"
+                onClick={() => regenerateKeyMutation.mutate()}
+                disabled={regenerateKeyMutation.isPending}
+                className="min-h-11"
+              >
+                {regenerateKeyMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}
                 Regenerate Key
               </Button>
+            </div>
+
+            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
+              Changes here update both the snippet and the preview, so you can validate the look before copying the embed code.
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Embed Script</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">Paste this script before the closing `&lt;/body&gt;` tag on your website.</p>
-            <Textarea value={scriptSnippet} readOnly rows={8} className="font-mono text-xs" />
-            <div className="flex gap-2">
-              <Button onClick={copySnippet} className="min-h-11">
-                <Copy className="w-4 h-4 mr-2" />
-                Copy Snippet
-              </Button>
-            </div>
-            <div className="rounded-md border border-border p-3 text-sm text-muted-foreground">
-              1. Copy the script above.
-              <br />2. Paste it into your website HTML.
-              <br />3. Publish your site and the chatbot appears as a floating button.
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <ChatWidgetPreview
+            botName={effectiveData?.botName ?? data.botName}
+            themeColor={effectiveData?.themeColor ?? data.themeColor}
+            position={effectiveData?.position ?? data.position}
+            language={effectiveData?.language ?? data.language}
+          />
+
+          <Card className="border-border/70 shadow-sm">
+            <CardHeader>
+              <CardTitle>Embed Script</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">Paste this script before the closing `&lt;/body&gt;` tag on your website.</p>
+              <Textarea value={scriptSnippet} readOnly rows={8} className="font-mono text-xs" />
+              <div className="flex gap-2">
+                <Button onClick={copySnippet} className="min-h-11">
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy Snippet
+                </Button>
+              </div>
+              <div className="rounded-2xl border border-border p-3 text-sm text-muted-foreground">
+                1. Copy the script above.
+                <br />2. Paste it into your website HTML.
+                <br />3. Publish your site and the chatbot appears as a floating button.
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </DashboardShell>
   );
