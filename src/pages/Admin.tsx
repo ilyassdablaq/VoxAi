@@ -1,11 +1,29 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Shield, Users, ServerCog, History, Activity, AlertCircle, LockKeyhole, Menu } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { adminService, type AdminUserSearchResult } from "@/services/admin.service";
+import { adminService, type AdminAuditLogItem, type AdminUserSearchResult } from "@/services/admin.service";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { AdminUserTable } from "@/components/admin/AdminUserTable";
+import { OverrideControls } from "@/components/admin/OverrideControls";
+import { AuditLogTable } from "@/components/admin/AuditLogTable";
+
+const AUDIT_PAGE_SIZE = 10;
+
+type PendingAction =
+  | {
+      kind: "set";
+      plan: "FREE" | "PRO";
+    }
+  | {
+      kind: "remove";
+    }
+  | null;
 
 function toIsoDateTime(localDateTime: string): string | undefined {
   if (!localDateTime) {
@@ -20,65 +38,89 @@ function toIsoDateTime(localDateTime: string): string | undefined {
   return date.toISOString();
 }
 
+function toLocalDateTimeInput(value?: string | null): string {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) {
+    return "";
+  }
+
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
+}
+
+function formatPlan(value?: string | null) {
+  return value ?? "FREE";
+}
+
 const Admin = () => {
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [searchInput, setSearchInput] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [selectedUser, setSelectedUser] = useState<AdminUserSearchResult | null>(null);
-  const [overridePlan, setOverridePlan] = useState<"FREE" | "PRO" | "ENTERPRISE">("PRO");
   const [reason, setReason] = useState("Internal QA override");
   const [expiresAtLocal, setExpiresAtLocal] = useState("");
+  const [auditPage, setAuditPage] = useState(1);
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
 
-  const searchEnabled = searchValue.trim().length >= 2;
+  const trimmedSearch = searchValue.trim();
+  const searchEnabled = trimmedSearch.length >= 2;
 
   const usersQuery = useQuery({
-    queryKey: ["admin-user-search", searchValue],
-    queryFn: () => adminService.searchUsers(searchValue, 10),
+    queryKey: ["admin", "users", trimmedSearch],
+    queryFn: () => adminService.searchUsers(trimmedSearch, 10),
     enabled: searchEnabled,
   });
 
   const effectiveAccessQuery = useQuery({
-    queryKey: ["admin-effective-access", selectedUser?.id],
+    queryKey: ["admin", "effective-access", selectedUser?.id],
     queryFn: () => adminService.getEffectiveAccess(selectedUser!.id),
     enabled: Boolean(selectedUser?.id),
   });
 
-  const overrideHistoryQuery = useQuery({
-    queryKey: ["admin-override-history", selectedUser?.id],
-    queryFn: () => adminService.getOverrideHistory(selectedUser!.id, 10),
-    enabled: Boolean(selectedUser?.id),
+  const auditLogsQuery = useQuery({
+    queryKey: ["admin", "audit-logs", auditPage],
+    queryFn: () => adminService.getAuditLogs({ limit: AUDIT_PAGE_SIZE, offset: (auditPage - 1) * AUDIT_PAGE_SIZE }),
   });
 
-  const refreshSelectedUserData = async () => {
-    if (!selectedUser?.id) {
-      return;
-    }
-
+  const refreshAdminData = async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["admin-effective-access", selectedUser.id] }),
-      queryClient.invalidateQueries({ queryKey: ["admin-override-history", selectedUser.id] }),
+      queryClient.invalidateQueries({ queryKey: ["admin", "effective-access", selectedUser?.id] }),
+      queryClient.invalidateQueries({ queryKey: ["admin", "audit-logs"] }),
     ]);
   };
 
   const setOverrideMutation = useMutation({
-    mutationFn: (plan: "FREE" | "PRO" | "ENTERPRISE") =>
-      adminService.setPlanOverride(selectedUser!.id, {
+    mutationFn: async (plan: "FREE" | "PRO") => {
+      if (!selectedUser) {
+        throw new Error("Select a user first.");
+      }
+
+      return adminService.setPlanOverride(selectedUser.id, {
         plan,
         reason: reason.trim() || undefined,
         expiresAt: toIsoDateTime(expiresAtLocal),
-      }),
+      });
+    },
     onSuccess: async () => {
-      await refreshSelectedUserData();
+      await refreshAdminData();
+      setConfirmationOpen(false);
+      setPendingAction(null);
       toast({
         title: "Override applied",
-        description: `Override has been updated for ${selectedUser?.email}.`,
+        description: `Override updated for ${selectedUser?.email}.`,
       });
     },
     onError: (error) => {
       toast({
-        title: "Failed to set override",
+        title: "Failed to apply override",
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       });
@@ -86,10 +128,21 @@ const Admin = () => {
   });
 
   const removeOverrideMutation = useMutation({
-    mutationFn: () => adminService.removeOverride(selectedUser!.id),
+    mutationFn: async () => {
+      if (!selectedUser) {
+        throw new Error("Select a user first.");
+      }
+
+      return adminService.removeOverride(selectedUser.id);
+    },
     onSuccess: async () => {
-      await refreshSelectedUserData();
-      toast({ title: "Override removed", description: "User now follows normal subscription plan." });
+      await refreshAdminData();
+      setConfirmationOpen(false);
+      setPendingAction(null);
+      toast({
+        title: "Override removed",
+        description: `Override cleared for ${selectedUser?.email}.`,
+      });
     },
     onError: (error) => {
       toast({
@@ -100,206 +153,304 @@ const Admin = () => {
     },
   });
 
-  const selectedSummary = useMemo(() => {
-    if (!effectiveAccessQuery.data) {
-      return null;
-    }
+  const selectedAccess = effectiveAccessQuery.data ?? null;
+  const effectivePlan = selectedAccess?.effectivePlan.type ?? "FREE";
+  const currentPlan = selectedAccess?.subscriptionPlan?.type ?? "FREE";
+  const overrideState = selectedAccess?.override;
 
-    const data = effectiveAccessQuery.data;
-    return {
-      effectivePlan: data.effectivePlan.type,
-      sourceLabel: data.effectivePlan.source === "admin_override" ? "Admin override" : "Subscription",
-      subscriptionPlan: data.subscriptionPlan?.type ?? "NONE",
-      overrideStatus: data.override
-        ? data.override.isActive
-          ? "ACTIVE"
-          : data.override.isExpired
-          ? "EXPIRED"
-          : "INACTIVE"
-        : "NONE",
-      overrideExpiresAt: data.override?.expiresAt ?? null,
-    };
-  }, [effectiveAccessQuery.data]);
+  const navigationItems = useMemo(
+    () => [
+      { id: "user-management", label: "User Management", icon: Users },
+      { id: "subscription-overrides", label: "Subscription Overrides", icon: Shield },
+      { id: "system-monitoring", label: "System Monitoring", icon: ServerCog },
+      { id: "audit-logs", label: "Audit Logs", icon: History },
+    ],
+    [],
+  );
+
+  const selectedSectionSummary = selectedUser
+    ? `${selectedUser.fullName} · ${selectedUser.email}`
+    : "No user selected";
+
+  const openSetPlanConfirmation = (plan: "FREE" | "PRO") => {
+    setPendingAction({ kind: "set", plan });
+    setConfirmationOpen(true);
+  };
+
+  const openRemoveConfirmation = () => {
+    setPendingAction({ kind: "remove" });
+    setConfirmationOpen(true);
+  };
+
+  const handleSearch = () => {
+    const nextValue = searchInput.trim();
+    setSearchValue(nextValue);
+    setSelectedUser(null);
+    setAuditPage(1);
+  };
+
+  const handleSelectUser = (userRow: AdminUserSearchResult) => {
+    setSelectedUser(userRow);
+  };
+
+  useEffect(() => {
+    setExpiresAtLocal(toLocalDateTimeInput(selectedAccess?.override?.expiresAt ?? null));
+  }, [selectedAccess?.override?.expiresAt, selectedUser?.id]);
+
+  const statusChips = [
+    { label: "Admin-only", value: user?.role === "ADMIN" ? "Enabled" : "Hidden" },
+    { label: "Rate limit", value: "60 req/min" },
+    { label: "Audit trail", value: `${auditLogsQuery.data?.total ?? 0} records` },
+  ];
+
+  const confirmationTitle = pendingAction?.kind === "remove" ? "Remove override" : `Set ${pendingAction?.plan ?? "PRO"}`;
+  const confirmationDescription =
+    pendingAction?.kind === "remove"
+      ? `Remove the active override for ${selectedUser?.email ?? "this user"}. The user will fall back to their subscription plan.`
+      : `Apply a ${pendingAction?.plan ?? "PRO"} override to ${selectedUser?.email ?? "this user"}. This will be recorded in the audit log.`;
+
+  const isSaving = setOverrideMutation.isPending || removeOverrideMutation.isPending;
 
   return (
-    <DashboardShell
-      title="Admin Panel"
-      description="Internal-only tools for testing paid feature access without Stripe or billing impact."
-    >
-      <div className="space-y-6">
-        <section className="bg-card border border-border rounded-lg p-5 space-y-4">
-          <h3 className="text-lg font-semibold">User Search</h3>
-          <div className="flex gap-2">
-            <Input
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="Search by user email or user id"
-            />
-            <Button
-              type="button"
-              onClick={() => {
-                setSearchValue(searchInput.trim());
-                setSelectedUser(null);
-              }}
-              disabled={searchInput.trim().length < 2}
-            >
-              Search
-            </Button>
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto flex max-w-[1600px] gap-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+        <aside className="sticky top-6 hidden h-[calc(100vh-3rem)] w-72 shrink-0 flex-col rounded-3xl border border-border/70 bg-card/90 p-4 shadow-sm backdrop-blur lg:flex">
+          <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Shield className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Admin Dashboard</p>
+                <p className="truncate text-xs text-muted-foreground">{user?.fullName ?? "Internal admin"}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Badge>ADMIN</Badge>
+              <Badge variant="outline">/api/admin/*</Badge>
+            </div>
           </div>
 
-          {usersQuery.data && usersQuery.data.length > 0 ? (
-            <div className="space-y-2">
-              {usersQuery.data.map((user) => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => setSelectedUser(user)}
-                  className={`w-full text-left rounded-md border p-3 transition-colors ${
-                    selectedUser?.id === user.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/40"
-                  }`}
-                >
-                  <p className="font-medium">{user.fullName}</p>
-                  <p className="text-xs text-muted-foreground">{user.email}</p>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </section>
+          <nav className="mt-5 space-y-2">
+            {navigationItems.map((item) => (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                className="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-border/70 hover:bg-accent hover:text-foreground"
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </a>
+            ))}
+          </nav>
 
-        {selectedUser ? (
-          <section className="grid gap-6 lg:grid-cols-2">
-            <div className="bg-card border border-border rounded-lg p-5 space-y-4">
-              <h3 className="text-lg font-semibold">Effective Access</h3>
-              {effectiveAccessQuery.isLoading ? <p className="text-sm text-muted-foreground">Loading access...</p> : null}
-              {selectedSummary ? (
-                <div className="space-y-2 text-sm">
-                  <p>
-                    <span className="text-muted-foreground">User:</span> {selectedUser.email}
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Effective plan:</span> {selectedSummary.effectivePlan}
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Source:</span> {selectedSummary.sourceLabel}
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Subscription plan:</span> {selectedSummary.subscriptionPlan}
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Override status:</span> {selectedSummary.overrideStatus}
-                  </p>
-                  {selectedSummary.overrideExpiresAt ? (
-                    <p>
-                      <span className="text-muted-foreground">Override expires:</span>{" "}
-                      {new Date(selectedSummary.overrideExpiresAt).toLocaleString()}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
+          <Separator className="my-5" />
 
-            <div className="bg-card border border-border rounded-lg p-5 space-y-4">
-              <h3 className="text-lg font-semibold">Override Controls</h3>
-
-              <div className="space-y-2">
-                <Label htmlFor="override-plan">Plan</Label>
-                <select
-                  id="override-plan"
-                  className="w-full h-10 rounded-md border border-border bg-background px-3 text-sm"
-                  value={overridePlan}
-                  onChange={(event) => setOverridePlan(event.target.value as "FREE" | "PRO" | "ENTERPRISE")}
-                >
-                  <option value="FREE">FREE</option>
-                  <option value="PRO">PRO</option>
-                  <option value="ENTERPRISE">ENTERPRISE</option>
-                </select>
+          <Card className="border-border/70 bg-muted/20">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <LockKeyhole className="h-4 w-4 text-primary" />
+                Access controls
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="override-reason">Reason</Label>
-                <Input
-                  id="override-reason"
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                  placeholder="Reason for override"
-                />
+              <p className="text-sm text-muted-foreground">
+                Access is enforced server-side with admin role checks and IP allowlisting.
+              </p>
+              <div className="rounded-xl border border-border/70 bg-background px-3 py-2 text-sm">
+                <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Current focus</div>
+                <div className="mt-1 font-medium">{selectedSectionSummary}</div>
               </div>
+            </CardContent>
+          </Card>
+        </aside>
 
-              <div className="space-y-2">
-                <Label htmlFor="override-expiration">Expiration (optional)</Label>
-                <Input
-                  id="override-expiration"
-                  type="datetime-local"
-                  value={expiresAtLocal}
-                  onChange={(event) => setExpiresAtLocal(event.target.value)}
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  onClick={() => setOverrideMutation.mutate("PRO")}
-                  disabled={setOverrideMutation.isPending}
-                >
-                  {setOverrideMutation.isPending ? "Setting..." : "Set PRO for user"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setOverrideMutation.mutate(overridePlan)}
-                  disabled={setOverrideMutation.isPending}
-                >
-                  {setOverrideMutation.isPending ? "Setting..." : `Set ${overridePlan} override`}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => removeOverrideMutation.mutate()}
-                  disabled={removeOverrideMutation.isPending}
-                >
-                  {removeOverrideMutation.isPending ? "Removing..." : "Remove override"}
-                </Button>
-              </div>
-            </div>
-          </section>
-        ) : null}
-
-        {selectedUser ? (
-          <section className="bg-card border border-border rounded-lg p-5 space-y-4">
-            <h3 className="text-lg font-semibold">Recent Override History</h3>
-            {overrideHistoryQuery.isLoading ? <p className="text-sm text-muted-foreground">Loading history...</p> : null}
-            {overrideHistoryQuery.data?.length ? (
-              <div className="space-y-2">
-                {overrideHistoryQuery.data.map((entry, idx) => (
-                  <div key={`${entry.createdAt}-${idx}`} className="rounded-md border border-border p-3 text-sm">
-                    <p>
-                      <span className="text-muted-foreground">Plan:</span> {entry.plan}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Reason:</span> {entry.reason || "N/A"}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Created:</span> {new Date(entry.createdAt).toLocaleString()}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">By:</span> {entry.createdByAdmin?.email || "Unknown admin"}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Revoked:</span>{" "}
-                      {entry.revokedAt ? new Date(entry.revokedAt).toLocaleString() : "Active or not revoked"}
+        <main className="min-w-0 flex-1 space-y-6 pb-8">
+          <section className="overflow-hidden rounded-3xl border border-border/70 bg-card/90 shadow-sm backdrop-blur">
+            <div className="border-b border-border/70 bg-gradient-to-r from-slate-50 via-background to-slate-100 p-6 dark:from-slate-950 dark:via-background dark:to-slate-950 sm:p-8">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                    <Menu className="h-4 w-4" />
+                    Internal operations
+                  </div>
+                  <div className="space-y-2">
+                    <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Admin Dashboard</h1>
+                    <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
+                      Search users, inspect effective plan access, apply temporary overrides, and review recent admin actions.
                     </p>
                   </div>
-                ))}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {statusChips.map((chip) => (
+                    <div key={chip.label} className="rounded-2xl border border-border/70 bg-background px-4 py-3 shadow-sm">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{chip.label}</div>
+                      <div className="mt-1 text-sm font-semibold">{chip.value}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No overrides found for this user.</p>
-            )}
+            </div>
+
+            <div className="grid gap-3 p-4 sm:grid-cols-3 lg:hidden">
+              {navigationItems.map((item) => (
+                <Button key={item.id} variant="outline" asChild className="justify-start">
+                  <a href={`#${item.id}`}>
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </a>
+                </Button>
+              ))}
+            </div>
           </section>
-        ) : null}
+
+          <section id="user-management" className="scroll-mt-6">
+            <AdminUserTable
+              query={searchInput}
+              onQueryChange={setSearchInput}
+              onSearch={handleSearch}
+              users={usersQuery.data ?? []}
+              selectedUserId={selectedUser?.id ?? null}
+              onSelectUser={handleSelectUser}
+              isLoading={usersQuery.isLoading}
+              isFetching={usersQuery.isFetching}
+            />
+          </section>
+
+          <section id="subscription-overrides" className="scroll-mt-6">
+            <OverrideControls
+              selectedUser={selectedAccess?.user ?? selectedUser}
+              effectiveAccess={selectedAccess}
+              isLoading={effectiveAccessQuery.isLoading}
+              reason={reason}
+              onReasonChange={setReason}
+              expiresAtLocal={expiresAtLocal}
+              onExpiresAtChange={setExpiresAtLocal}
+              onRequestSetPlan={openSetPlanConfirmation}
+              onRequestRemoveOverride={openRemoveConfirmation}
+              isSettingOverride={setOverrideMutation.isPending}
+              isRemovingOverride={removeOverrideMutation.isPending}
+            />
+          </section>
+
+          <section id="system-monitoring" className="scroll-mt-6">
+            <Card className="border-border/70 shadow-sm">
+              <CardContent className="space-y-5 p-6">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Activity className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold">System Monitoring</h2>
+                    <p className="text-sm text-muted-foreground">Basic operational status for the admin surface.</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                    <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Access Control</div>
+                    <div className="mt-2 text-lg font-semibold">Server enforced</div>
+                    <p className="mt-1 text-sm text-muted-foreground">Admin role checks and IP allowlisting are enforced before every admin route.</p>
+                  </div>
+                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                    <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">API Budget</div>
+                    <div className="mt-2 text-lg font-semibold">60 req/min</div>
+                    <p className="mt-1 text-sm text-muted-foreground">Admin endpoints are rate limited to reduce accidental abuse.</p>
+                  </div>
+                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
+                    <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Audit Trail</div>
+                    <div className="mt-2 text-lg font-semibold">{auditLogsQuery.data?.total ?? 0} actions</div>
+                    <p className="mt-1 text-sm text-muted-foreground">Override changes are written to the audit log with admin and target identifiers.</p>
+                  </div>
+                </div>
+
+                {selectedAccess ? (
+                  <div className="grid gap-3 rounded-2xl border border-border/70 bg-background p-4 sm:grid-cols-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Selected User</div>
+                      <div className="mt-1 font-semibold">{selectedAccess.user.fullName}</div>
+                      <div className="text-sm text-muted-foreground">{selectedAccess.user.email}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Current Plan</div>
+                      <div className="mt-1 font-semibold">{formatPlan(currentPlan)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Effective Plan</div>
+                      <div className="mt-1 font-semibold">{formatPlan(effectivePlan)}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-2xl border border-dashed border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
+                    <AlertCircle className="h-4 w-4" />
+                    Select a user to surface live plan telemetry here.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </section>
+
+          <section id="audit-logs" className="scroll-mt-6">
+            <AuditLogTable
+              items={(auditLogsQuery.data?.items ?? []) as AdminAuditLogItem[]}
+              isLoading={auditLogsQuery.isLoading || auditLogsQuery.isFetching}
+              total={auditLogsQuery.data?.total ?? 0}
+              page={auditPage}
+              pageSize={AUDIT_PAGE_SIZE}
+              onPageChange={setAuditPage}
+            />
+          </section>
+        </main>
       </div>
-    </DashboardShell>
+
+      <Dialog open={confirmationOpen} onOpenChange={(open) => {
+        setConfirmationOpen(open);
+        if (!open) {
+          setPendingAction(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{confirmationTitle}</DialogTitle>
+            <DialogDescription>{confirmationDescription}</DialogDescription>
+          </DialogHeader>
+          <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
+            <div className="font-medium text-foreground">Reason</div>
+            <div className="mt-1">{reason.trim() || "No reason provided"}</div>
+            <div className="mt-3 font-medium text-foreground">Expiration</div>
+            <div className="mt-1">{expiresAtLocal ? new Date(expiresAtLocal).toLocaleString() : "No expiration set"}</div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConfirmationOpen(false);
+                setPendingAction(null);
+              }}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!pendingAction) {
+                  return;
+                }
+
+                if (pendingAction.kind === "remove") {
+                  await removeOverrideMutation.mutateAsync();
+                  return;
+                }
+
+                await setOverrideMutation.mutateAsync(pendingAction.plan);
+              }}
+              disabled={isSaving || !selectedUser}
+            >
+              {isSaving ? "Processing..." : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 

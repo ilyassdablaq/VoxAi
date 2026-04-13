@@ -6,12 +6,14 @@ import { PlanCheckService } from "../../common/services/plan-check.service.js";
 import { AdminRepository } from "./admin.repository.js";
 import { AdminService } from "./admin.service.js";
 import {
+  adminAuditLogsQuerySchema,
   adminUserParamsSchema,
   adminUserSearchQuerySchema,
   overrideHistoryQuerySchema,
   setPlanOverrideSchema,
   type AdminUserParamsInput,
   type AdminUserSearchQueryInput,
+  type AdminAuditLogsQueryInput,
   type OverrideHistoryQueryInput,
   type SetPlanOverrideInput,
 } from "./admin.schemas.js";
@@ -116,6 +118,18 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       const { userId } = request.params as AdminUserParamsInput;
       const { limit } = request.query as OverrideHistoryQueryInput;
       return service.getOverrideHistory(userId, limit);
+    },
+  );
+
+  fastify.get(
+    "/api/admin/audit-logs",
+    {
+      preHandler: [...adminPreHandlers, validate({ query: adminAuditLogsQuerySchema })],
+      config: adminRateLimitConfig,
+    },
+    async (request) => {
+      const { limit, offset } = request.query as AdminAuditLogsQueryInput;
+      return service.getAuditLogs(limit, offset);
     },
   );
 }

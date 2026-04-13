@@ -15,6 +15,15 @@ interface SetOverrideInput {
   reason?: string;
 }
 
+interface AuditLogResponseItem {
+  id: string;
+  adminId: string | null;
+  targetUserId: string | null;
+  action: string;
+  reason: string | null;
+  timestamp: string;
+}
+
 export class AdminService {
   constructor(
     private readonly repository: AdminRepository,
@@ -209,5 +218,30 @@ export class AdminService {
           }
         : null,
     }));
+  }
+
+  async getAuditLogs(limit: number, offset: number): Promise<{ items: AuditLogResponseItem[]; total: number }> {
+    const logs = await auditLogService.queryLogsPage({
+      actionPrefix: "admin.subscription.override.",
+      resourceType: "user",
+      limit,
+      offset,
+    });
+
+    return {
+      items: logs.items.map((entry) => {
+        const changes = (entry.changes ?? {}) as Record<string, unknown>;
+
+        return {
+          id: entry.id,
+          adminId: entry.principalId,
+          targetUserId: typeof changes.targetUserId === "string" ? changes.targetUserId : entry.resourceId,
+          action: entry.action,
+          reason: typeof changes.reason === "string" ? changes.reason : null,
+          timestamp: entry.createdAt.toISOString(),
+        };
+      }),
+      total: logs.total,
+    };
   }
 }
