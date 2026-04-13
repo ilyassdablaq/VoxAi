@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Menu, X, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const navLinks = [
   { label: "Features", href: "/features" },
@@ -53,6 +54,7 @@ const Navbar = () => {
 
           {/* CTA */}
           <div className="hidden md:flex items-center gap-3">
+            <ThemeToggle />
             <Button variant="ghost" size="sm" asChild>
               <Link to="/sign-in">Sign In</Link>
             </Button>
@@ -98,6 +100,7 @@ const Navbar = () => {
                 </Link>
               ))}
               <div className="pt-3 border-t border-border/50 mt-4 space-y-2">
+                <ThemeToggle className="w-full min-h-12" showLabel />
                 <Button variant="outline" size="lg" className="w-full min-h-12" asChild>
                   <Link to="/sign-in" onClick={() => setMobileOpen(false)}>Sign In</Link>
                 </Button>

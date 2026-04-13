@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { PlanBadge } from "@/components/PlanBadge";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Sheet,
@@ -229,7 +230,8 @@ export function DashboardShell({ title, description, children }: DashboardShellP
               </div>
             </div>
 
-            <div className="hidden md:block">
+            <div className="hidden md:flex md:items-center md:gap-2">
+              <ThemeToggle />
               <PlanBadge />
             </div>
           </div>
