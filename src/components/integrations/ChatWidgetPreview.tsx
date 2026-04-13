@@ -125,16 +125,13 @@ export function ChatWidgetPreview({ botName, themeColor, position, language, lau
           <button
             type="button"
             className={cn(
-              "flex h-14 items-center justify-center rounded-full text-sm font-semibold shadow-[0_18px_30px_rgba(15,23,42,0.28)]",
+              "flex h-14 items-center justify-center gap-2 rounded-full text-sm font-semibold shadow-[0_18px_30px_rgba(15,23,42,0.28)]",
               launcherLabel ? "px-4" : "w-14",
             )}
             style={{ background: themeColor, color: textTone }}
           >
-            {launcherLabel ? (
-              <span className="max-w-[120px] truncate">{launcherLabel}</span>
-            ) : (
-              <LauncherIcon className="h-5 w-5" />
-            )}
+            <LauncherIcon className="h-5 w-5" />
+            {launcherLabel ? <span className="max-w-[120px] truncate">{launcherLabel}</span> : null}
           </button>
         </div>
       </div>

@@ -325,8 +325,8 @@ export default function Integrations() {
               themeColor={effectiveData?.themeColor ?? data.themeColor}
               position={effectiveData?.position ?? data.position}
               language={effectiveData?.language ?? data.language}
-              launcherText={effectiveData?.launcherText ?? data.launcherText}
-              launcherIcon={effectiveData?.launcherIcon ?? data.launcherIcon}
+              launcherText={effectiveData?.launcherText ?? data.launcherText ?? "Chat"}
+              launcherIcon={effectiveData?.launcherIcon ?? data.launcherIcon ?? "chat"}
             />
           </IntegrationPreviewBoundary>
 

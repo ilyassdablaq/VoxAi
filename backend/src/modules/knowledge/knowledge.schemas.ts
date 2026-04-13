@@ -17,13 +17,27 @@ export const ingestStructuredSchema = z.object({
 });
 
 export const ingestUrlSchema = z.object({
-  url: z
-    .string()
-    .url()
-    .refine((value) => {
-      const normalized = value.toLowerCase();
-      return normalized.startsWith("http://") || normalized.startsWith("https://");
-    }, "URL must start with http:// or https://"),
+  url: z.preprocess(
+    (raw) => {
+      if (typeof raw !== "string") {
+        return raw;
+      }
+
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        return trimmed;
+      }
+
+      return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    },
+    z
+      .string()
+      .url()
+      .refine((value) => {
+        const normalized = value.toLowerCase();
+        return normalized.startsWith("http://") || normalized.startsWith("https://");
+      }, "URL must start with http:// or https://"),
+  ),
   maxPages: z.coerce.number().int().min(1).max(10).default(4),
 });
 

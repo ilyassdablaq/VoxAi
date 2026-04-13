@@ -12,7 +12,7 @@ import { prisma } from "../../infra/database/prisma.js";
 const EMBEDDING_DIMENSION = 1536;
 const CHUNK_WORDS = 400;
 const CHUNK_OVERLAP_WORDS = 70;
-const CRAWL_TIMEOUT_MS = 12000;
+const CRAWL_TIMEOUT_MS = 20000;
 const RETRIEVAL_CACHE_TTL_MS = 45_000;
 const RETRIEVAL_CACHE_MAX_ITEMS = 1_000;
 const EMBEDDING_CONCURRENCY = 4;

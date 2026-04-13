@@ -132,17 +132,26 @@
     return svg;
   }
 
+  launcher.innerHTML = "";
+  launcher.appendChild(createLauncherIcon(launcherIcon));
+
   if (launcherText) {
-    launcher.innerText = launcherText;
+    var launcherLabel = document.createElement("span");
+    launcherLabel.innerText = launcherText;
+    launcherLabel.style.maxWidth = "120px";
+    launcherLabel.style.overflow = "hidden";
+    launcherLabel.style.textOverflow = "ellipsis";
+    launcherLabel.style.whiteSpace = "nowrap";
+    launcher.appendChild(launcherLabel);
     launcher.style.width = "auto";
     launcher.style.minWidth = "56px";
     launcher.style.padding = "0 16px";
+    launcher.style.gap = "8px";
   } else {
-    launcher.innerHTML = "";
-    launcher.appendChild(createLauncherIcon(launcherIcon));
     launcher.style.width = "56px";
     launcher.style.minWidth = "56px";
     launcher.style.padding = "0";
+    launcher.style.gap = "0";
   }
 
   shell.appendChild(panel);
