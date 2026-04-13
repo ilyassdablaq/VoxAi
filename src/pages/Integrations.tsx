@@ -105,7 +105,11 @@ export default function Integrations() {
 
     setBotName(data.botName ?? "");
     setThemeColor(toSafeHexColor(data.themeColor));
-    setThemeMode(data.themeMode ?? "light");
+    setThemeMode((previous) =>
+      data.themeMode === "dark" || data.themeMode === "light"
+        ? data.themeMode
+        : previous,
+    );
     setPosition(data.position);
     setLanguage(data.language);
     setLauncherText((previous) => (typeof data.launcherText === "string" ? data.launcherText.trim() : previous));
