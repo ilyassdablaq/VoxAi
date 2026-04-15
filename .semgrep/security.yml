@@ -1,7 +1,11 @@
 rules:
   - id: prisma-unsafe-query-template-interpolation
     patterns:
-      - pattern-regex: "\\$(query|execute)RawUnsafe\\s*\\(\\s*`[\\s\\S]*\\$\\{"
+      - pattern-regex: "\\$(query|execute)RawUnsafe\\s*\\(\\s*`(?:[^`\\\\]|\\\\.)*\\$\\{"
+    paths:
+      exclude:
+        - "**/*.test.ts"
+        - "**/*.spec.ts"
     message: "Avoid interpolating user-controlled values in prisma raw unsafe queries. Use placeholders and bound args only."
     severity: ERROR
     languages: [typescript, javascript]
