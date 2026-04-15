@@ -64,7 +64,10 @@ let wsBaseIndex = 0;
 function buildWebSocketUrl(baseUrl: string, conversationId: string, token: string) {
   const parsed = new URL(baseUrl);
   const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${parsed.host}/ws/conversations/${conversationId}?token=${encodeURIComponent(token)}`;
+  return {
+    url: `${protocol}//${parsed.host}/ws/conversations/${conversationId}`,
+    token,
+  };
 }
 
 export const conversationService = {
@@ -107,7 +110,19 @@ export const conversationService = {
 
     const selectedBase = WS_BASE_CANDIDATES[wsBaseIndex % WS_BASE_CANDIDATES.length];
     wsBaseIndex += 1;
+    const { url, token } = buildWebSocketUrl(selectedBase, conversationId, accessToken);
+    const socket = new WebSocket(url);
 
-    return new WebSocket(buildWebSocketUrl(selectedBase, conversationId, accessToken));
+    socket.addEventListener("open", () => {
+      socket.send(
+        JSON.stringify({
+          type: "auth",
+          data: "authenticate",
+          token,
+        }),
+      );
+    });
+
+    return socket;
   },
 };

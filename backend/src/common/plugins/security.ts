@@ -10,22 +10,52 @@ import { AppError } from "../errors/app-error.js";
 import { logger } from "../../config/logger.js";
 import { PlanCheckService } from "../services/plan-check.service.js";
 
+function isAllowedOrigin(origin: string): boolean {
+  if (origin === env.APP_ORIGIN) {
+    return true;
+  }
+
+  if (env.NODE_ENV === "production") {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(origin);
+    return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function registerSecurityPlugins(fastify: FastifyInstance): Promise<void> {
   const planCheckService = new PlanCheckService();
 
   await fastify.register(helmet, {
     global: true,
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        baseUri: ["'none'"],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+      },
+    },
+    xFrameOptions: { action: "deny" },
+    strictTransportSecurity: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
   });
 
   await fastify.register(cors, {
     origin: (origin, callback) => {
-      if (!origin || origin === env.APP_ORIGIN) {
+      if (!origin || isAllowedOrigin(origin)) {
         callback(null, true);
         return;
       }
 
-      callback(null, true);
+      callback(new Error("CORS origin not allowed"), false);
     },
     credentials: true,
   });

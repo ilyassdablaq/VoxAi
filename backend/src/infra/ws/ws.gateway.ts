@@ -14,7 +14,21 @@ export function registerWebSocketGateway(
     const typedSocket = socket as WebSocket;
     const { id: conversationId } = request.params as { id: string };
     let authenticatedUserId: string | null = null;
+    let isAuthenticated = false;
     let isTextMessageInFlight = false;
+    const authTimeout = setTimeout(() => {
+      if (!isAuthenticated && typedSocket.readyState === WebSocket.OPEN) {
+        typedSocket.send(
+          JSON.stringify({
+            type: "error",
+            error: {
+              message: "Authentication timed out",
+            },
+          }),
+        );
+        typedSocket.close(1008, "Authentication timed out");
+      }
+    }, 10_000);
     const heartbeatInterval = setInterval(() => {
       if (typedSocket.readyState === WebSocket.OPEN) {
         typedSocket.ping();
@@ -22,49 +36,18 @@ export function registerWebSocketGateway(
     }, 25000);
 
     typedSocket.on("close", () => {
+      clearTimeout(authTimeout);
       clearInterval(heartbeatInterval);
     });
 
     try {
-      const query = request.query as { token?: string };
       const authHeader = request.headers.authorization;
 
-      if (!authHeader && query?.token) {
-        request.headers.authorization = `Bearer ${query.token}`;
-      }
-
-      await request.jwtVerify();
-
-      const user = request.user as { sub: string };
+      if (authHeader) {
+        await request.jwtVerify();
+        const user = request.user as { sub: string };
         authenticatedUserId = user.sub;
-      const conversation = await conversationRepository.getConversationById(conversationId);
-
-      if (!conversation) {
-        typedSocket.send(
-          JSON.stringify({
-            type: "error",
-            error: {
-              message: "Conversation not found",
-            },
-          }),
-        );
-        typedSocket.close(1008, "Unauthorized");
-        return;
-      }
-
-      try {
-        assertTenantAccess(conversation.userId, user.sub, "conversation");
-      } catch {
-        typedSocket.send(
-          JSON.stringify({
-            type: "error",
-            error: {
-              message: "Unauthorized conversation access",
-            },
-          }),
-        );
-        typedSocket.close(1008, "Unauthorized");
-        return;
+        isAuthenticated = true;
       }
     } catch {
       typedSocket.send(
@@ -82,13 +65,58 @@ export function registerWebSocketGateway(
     socket.on("message", async (message: RawData) => {
       try {
         const payload = JSON.parse(String(message)) as {
-          type: "audio_chunk" | "text_message";
+          type: "auth" | "audio_chunk" | "text_message";
           data: string;
           language?: string;
+          token?: string;
         };
 
         if (!payload.type || !payload.data) {
           throw new AppError(400, "INVALID_WS_PAYLOAD", "Invalid WebSocket payload");
+        }
+
+        if (!isAuthenticated) {
+          if (payload.type !== "auth" || !payload.token) {
+            throw new AppError(401, "UNAUTHORIZED", "Authentication required before sending chat messages");
+          }
+
+          request.headers.authorization = `Bearer ${payload.token}`;
+          await request.jwtVerify();
+
+          const user = request.user as { sub: string };
+          authenticatedUserId = user.sub;
+
+          const conversation = await conversationRepository.getConversationById(conversationId);
+          if (!conversation) {
+            typedSocket.send(
+              JSON.stringify({
+                type: "error",
+                error: {
+                  message: "Conversation not found",
+                },
+              }),
+            );
+            typedSocket.close(1008, "Unauthorized");
+            return;
+          }
+
+          try {
+            assertTenantAccess(conversation.userId, user.sub, "conversation");
+          } catch {
+            typedSocket.send(
+              JSON.stringify({
+                type: "error",
+                error: {
+                  message: "Unauthorized conversation access",
+                },
+              }),
+            );
+            typedSocket.close(1008, "Unauthorized");
+            return;
+          }
+
+          isAuthenticated = true;
+          return;
         }
 
         if (payload.type === "text_message") {

@@ -1,0 +1,22 @@
+rules:
+  - id: prisma-unsafe-query-template-interpolation
+    patterns:
+      - pattern-regex: "\\$(query|execute)RawUnsafe\\s*\\(\\s*`[\\s\\S]*\\$\\{"
+    message: "Avoid interpolating user-controlled values in prisma raw unsafe queries. Use placeholders and bound args only."
+    severity: ERROR
+    languages: [typescript, javascript]
+
+  - id: dangerous-dynamic-execution
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+    message: "Avoid dynamic code execution sinks (eval/new Function)."
+    severity: ERROR
+    languages: [typescript, javascript]
+
+  - id: child-process-exec-sink
+    pattern-regex: "\\b(exec|spawn)\\s*\\("
+    message: "Review command execution sinks carefully for command injection risks."
+    severity: WARNING
+    languages: [typescript, javascript]

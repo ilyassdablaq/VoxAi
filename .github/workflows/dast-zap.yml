@@ -1,0 +1,37 @@
+name: DAST ZAP Baseline
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 2"
+
+jobs:
+  zap-baseline:
+    name: OWASP ZAP Baseline Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate target URL secret
+        id: target
+        run: |
+          if [ -z "${{ secrets.DAST_TARGET_URL }}" ]; then
+            echo "has_target=false" >> "$GITHUB_OUTPUT"
+            echo "DAST_TARGET_URL is not configured; skipping scan."
+          else
+            echo "has_target=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run ZAP baseline
+        if: steps.target.outputs.has_target == 'true'
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ secrets.DAST_TARGET_URL }}
+          fail_action: true
+          allow_issue_writing: false
+
+      - name: Skip notice
+        if: steps.target.outputs.has_target != 'true'
+        run: echo "Skipped ZAP scan because DAST_TARGET_URL is missing."

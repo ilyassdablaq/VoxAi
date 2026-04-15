@@ -18,6 +18,7 @@ import {
 export async function knowledgeRoutes(fastify: FastifyInstance): Promise<void> {
   const service = new KnowledgeService(new RagService());
   const allowedExtensions = [".pdf", ".txt", ".json", ".xml"];
+  const allowedMimeTypes = new Set(["application/pdf", "text/plain", "application/json", "application/xml", "text/xml"]);
 
   fastify.get("/api/knowledge/documents", { preHandler: [authenticate] }, async (request) => {
     const user = request.user as { sub: string };
@@ -57,6 +58,10 @@ export async function knowledgeRoutes(fastify: FastifyInstance): Promise<void> {
 
         if (!hasAllowedExtension) {
           throw new AppError(400, "UNSUPPORTED_FILE_TYPE", "Only PDF, TXT, JSON, and XML files are supported");
+        }
+
+        if (!allowedMimeTypes.has(mimetype.toLowerCase())) {
+          throw new AppError(400, "UNSUPPORTED_FILE_TYPE", "Uploaded file MIME type is not allowed");
         }
 
         if (!fileBuffer.length) {
