@@ -1,12 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/services/auth.service", () => ({
-  authService: {
-    getAccessToken: vi.fn(),
-  },
-}));
-
-import { authService } from "@/services/auth.service";
 import { conversationService } from "./conversation.service";
 
 class MockWebSocket {
@@ -44,38 +37,34 @@ describe("conversationService WebSocket security", () => {
 
   beforeEach(() => {
     MockWebSocket.instances = [];
-    vi.mocked(authService.getAccessToken).mockReturnValue("test-jwt-token");
     global.WebSocket = MockWebSocket as unknown as typeof WebSocket;
   });
 
-  it("does not place JWT token in WebSocket URL", () => {
+  it("does not place JWT token in WebSocket URL (cookie-based auth only)", () => {
     conversationService.createSocket("conv-123");
     const socket = MockWebSocket.instances[0];
 
     expect(socket.url).toContain("/ws/conversations/conv-123");
     expect(socket.url).not.toContain("token=");
-    expect(socket.url).not.toContain("test-jwt-token");
+    expect(socket.url).not.toContain("Bearer");
+    expect(socket.url).not.toContain("authorization");
   });
 
-  it("sends authentication payload after socket opens", () => {
+  it("does not send token in WebSocket message payload (authentication via cookie)", () => {
     conversationService.createSocket("conv-abc");
     const socket = MockWebSocket.instances[0];
     socket.emitOpen();
 
-    expect(socket.sentMessages).toHaveLength(1);
-    expect(JSON.parse(socket.sentMessages[0])).toEqual({
-      type: "auth",
-      data: "authenticate",
-      token: "test-jwt-token",
-    });
+    // Socket should not send any auth payload; cookies are handled by browser
+    expect(socket.sentMessages.length).toBe(0);
   });
 
-  it("throws when no token is available", () => {
-    vi.mocked(authService.getAccessToken).mockReturnValue(null);
+  it("does not construct Authorization headers or bearer tokens", () => {
+    conversationService.createSocket("conv-1");
+    const socket = MockWebSocket.instances[0];
 
-    expect(() => conversationService.createSocket("conv-1")).toThrow(
-      "You must be signed in to open this conversation.",
-    );
+    // Verify no auth message was sent
+    expect(socket.sentMessages).not.toContain(expect.stringMatching(/Bearer|Authorization|token/i));
   });
 
   afterEach(() => {

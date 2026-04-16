@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
 import { trackEvent } from '@/lib/product-analytics';
+import { Seo } from '@/components/Seo';
 
 export function StripeSuccess() {
   const navigate = useNavigate();
@@ -29,6 +30,12 @@ export function StripeSuccess() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <Seo
+        title="Checkout Successful"
+        description="Your payment was successful. VoxAI is syncing your subscription and redirecting you to the dashboard."
+        path="/stripe-success"
+        noindex
+      />
       <div className="text-center">
         <div className="mb-4">
           <svg className="w-16 h-16 text-green-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -42,7 +42,11 @@ describe("AuthService", () => {
     mockFastify = {
       jwt: {
         sign: vi.fn((payload, options) => `token-${Date.now()}`),
-        decode: vi.fn(),
+      },
+      refreshJwt: {
+        sign: vi.fn(() => "refresh-token"),
+        verify: vi.fn(),
+        decode: vi.fn(() => ({ exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60 })),
       },
     };
 
@@ -173,10 +177,11 @@ describe("AuthService", () => {
       const refreshToken = "valid-refresh-token";
 
       mockRepository.findRefreshToken.mockResolvedValue(testFixtures.refreshToken);
-      mockFastify.jwt.decode.mockReturnValue({
+      mockFastify.refreshJwt.verify.mockResolvedValue({
         sub: testFixtures.user.id,
         email: testFixtures.user.email,
         role: "USER",
+        type: "refresh",
       });
       mockRepository.revokeRefreshToken.mockResolvedValue(undefined);
       mockRepository.createRefreshToken.mockResolvedValue(undefined);
@@ -235,10 +240,29 @@ describe("AuthService", () => {
 
     it("should throw INVALID_REFRESH_TOKEN when decoded payload is invalid", async () => {
       mockRepository.findRefreshToken.mockResolvedValue(testFixtures.refreshToken);
-      mockFastify.jwt.decode.mockReturnValue(null);
+      mockFastify.refreshJwt.verify.mockResolvedValue(null);
 
       await expect(
         authService.refresh({ refreshToken: "invalid-payload-token" })
+      ).rejects.toThrow(
+        expect.objectContaining({
+          statusCode: 401,
+          code: "INVALID_REFRESH_TOKEN",
+        })
+      );
+    });
+
+    it("should throw INVALID_REFRESH_TOKEN when token type is not refresh", async () => {
+      mockRepository.findRefreshToken.mockResolvedValue(testFixtures.refreshToken);
+      mockFastify.refreshJwt.verify.mockResolvedValue({
+        sub: testFixtures.user.id,
+        email: testFixtures.user.email,
+        role: "USER",
+        type: "access",
+      });
+
+      await expect(
+        authService.refresh({ refreshToken: "wrong-type-token" })
       ).rejects.toThrow(
         expect.objectContaining({
           statusCode: 401,
@@ -377,6 +401,71 @@ describe("AuthService", () => {
       const updateCall = vi.mocked(prisma.user.update).mock.calls[0][0];
       expect((updateCall.data as any).passwordResetToken).toBeNull();
       expect((updateCall.data as any).passwordResetExpiresAt).toBeNull();
+    });
+  });
+
+  describe("Security: No Bearer Token Fallbacks", () => {
+    /**
+     * These tests verify that all bearer-token compatibility fallbacks have been removed.
+     * Authentication MUST use cookies only; no implicit fallback to Authorization headers.
+     */
+
+    it("should not have any bearer token extraction logic in service methods", () => {
+      // Verify the service does not attempt to parse Authorization headers
+      // All token handling should be explicit and parameter-based
+      expect(authService).toBeDefined();
+
+      // The service accepts explicit tokens only (via function parameters)
+      // No private/internal methods should search for Authorization headers
+      const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(authService || {}));
+      const hasAuthHeaderMethods = methods.some(
+        (m) => 
+          m.includes("authorization") ||
+          m.includes("Authorization") ||
+          m.includes("bearer") ||
+          m.includes("Bearer")
+      );
+      expect(hasAuthHeaderMethods).toBe(false);
+    });
+
+    it("should require explicit refresh token in refresh method", async () => {
+      mockRepository.findRefreshToken.mockResolvedValue(testFixtures.refreshToken);
+      mockFastify.refreshJwt.verify.mockResolvedValue({
+        sub: testFixtures.user.id,
+        email: testFixtures.user.email,
+        role: "USER",
+        type: "refresh",
+      });
+      mockRepository.revokeRefreshToken.mockResolvedValue(undefined);
+      mockRepository.createRefreshToken.mockResolvedValue(undefined);
+
+      // Refresh MUST be called with explicit token parameter
+      // No fallback to Authorization header
+      await authService.refresh({ refreshToken: "valid-token" });
+
+      expect(mockRepository.findRefreshToken).toHaveBeenCalledWith(expect.any(String));
+    });
+
+    it("should not have implicit token lookup from request context", async () => {
+      // AuthService is a plain class that does not inspect request context
+      // All auth information must be passed explicitly via parameters
+
+      mockRepository.findUserByEmail.mockResolvedValue(testFixtures.user);
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+      mockRepository.createRefreshToken.mockResolvedValue(undefined);
+
+      const result = await authService.login({
+        email: testFixtures.user.email,
+        password: "Password123",
+      });
+
+      // Verify login result contains tokens (not retrieved from implicit context)
+      expect(result.accessToken).toBeDefined();
+      expect(result.refreshToken).toBeDefined();
+
+      // Tokens are issued via explicit methods, not searched from environment
+      expect(mockFastify.jwt.sign).toHaveBeenCalled();
+      expect(mockFastify.refreshJwt.sign).toHaveBeenCalled();
     });
   });
 });

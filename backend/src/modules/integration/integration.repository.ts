@@ -12,6 +12,7 @@ type IntegrationSettingsRecord = {
   launcherIcon: "chat" | "message" | "sparkles" | "none";
   initialBotMessage: string;
   maxSessionQuestions: number;
+  microphoneEnabled: boolean;
   embedKey: string;
   updatedAt: Date;
 };
@@ -40,6 +41,7 @@ export class IntegrationRepository {
         launcher_icon TEXT NOT NULL DEFAULT 'chat',
         initial_bot_message TEXT NOT NULL DEFAULT 'Hi. Send me a message and I will reply here.',
         max_session_questions INTEGER NOT NULL DEFAULT 3,
+        microphone_enabled BOOLEAN NOT NULL DEFAULT FALSE,
         embed_key TEXT UNIQUE NOT NULL,
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
@@ -70,6 +72,11 @@ export class IntegrationRepository {
       ADD COLUMN IF NOT EXISTS max_session_questions INTEGER NOT NULL DEFAULT 3
     `);
 
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE integration_settings
+      ADD COLUMN IF NOT EXISTS microphone_enabled BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+
     this.initialized = true;
   }
 
@@ -84,6 +91,7 @@ export class IntegrationRepository {
     launcher_icon: "chat" | "message" | "sparkles" | "none" | null;
     initial_bot_message: string | null;
     max_session_questions: number | null;
+    microphone_enabled: boolean | null;
     embed_key: string;
     updated_at: Date;
   }): IntegrationSettingsRecord {
@@ -98,6 +106,7 @@ export class IntegrationRepository {
       launcherIcon: row.launcher_icon ?? "chat",
       initialBotMessage: row.initial_bot_message ?? "Hi. Send me a message and I will reply here.",
       maxSessionQuestions: row.max_session_questions ?? 3,
+      microphoneEnabled: row.microphone_enabled ?? false,
       embedKey: row.embed_key,
       updatedAt: row.updated_at,
     };
@@ -118,12 +127,13 @@ export class IntegrationRepository {
         launcher_icon: "chat" | "message" | "sparkles" | "none" | null;
         initial_bot_message: string | null;
         max_session_questions: number | null;
+        microphone_enabled: boolean | null;
         embed_key: string;
         updated_at: Date;
       }>
     >(
       `
-        SELECT user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, embed_key, updated_at
+        SELECT user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, embed_key, updated_at
         FROM integration_settings
         WHERE user_id = $1
       `,
@@ -137,8 +147,8 @@ export class IntegrationRepository {
     const embedKey = createEmbedKey();
     await prisma.$executeRawUnsafe(
       `
-        INSERT INTO integration_settings (user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, embed_key, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+        INSERT INTO integration_settings (user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, embed_key, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
       `,
       userId,
       "Chatbot",
@@ -150,6 +160,7 @@ export class IntegrationRepository {
       "chat",
       "Hi. Send me a message and I will reply here.",
       3,
+      false,
       embedKey,
     );
 
@@ -164,6 +175,7 @@ export class IntegrationRepository {
       launcherIcon: "chat",
       initialBotMessage: "Hi. Send me a message and I will reply here.",
       maxSessionQuestions: 3,
+      microphoneEnabled: false,
       embedKey,
       updatedAt: new Date(),
     } as IntegrationSettingsRecord;
@@ -179,6 +191,7 @@ export class IntegrationRepository {
     launcherIcon: "chat" | "message" | "sparkles" | "none";
     initialBotMessage: string;
     maxSessionQuestions: number;
+    microphoneEnabled: boolean;
   }) {
     await this.ensureTable();
 
@@ -196,6 +209,7 @@ export class IntegrationRepository {
         launcher_icon: "chat" | "message" | "sparkles" | "none" | null;
         initial_bot_message: string | null;
         max_session_questions: number | null;
+        microphone_enabled: boolean | null;
         embed_key: string;
         updated_at: Date;
       }>
@@ -211,9 +225,10 @@ export class IntegrationRepository {
             launcher_icon = $8,
             initial_bot_message = $9,
             max_session_questions = $10,
+            microphone_enabled = $11,
             updated_at = NOW()
         WHERE user_id = $1
-        RETURNING user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, embed_key, updated_at
+          RETURNING user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, embed_key, updated_at
       `,
       userId,
       payload.botName,
@@ -225,6 +240,7 @@ export class IntegrationRepository {
       payload.launcherIcon,
       payload.initialBotMessage,
       payload.maxSessionQuestions,
+      payload.microphoneEnabled,
     );
 
     if (updatedRows.length === 0) {
@@ -269,12 +285,13 @@ export class IntegrationRepository {
         launcher_icon: "chat" | "message" | "sparkles" | "none" | null;
         initial_bot_message: string | null;
         max_session_questions: number | null;
+        microphone_enabled: boolean | null;
         embed_key: string;
         updated_at: Date;
       }>
     >(
       `
-        SELECT user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, embed_key, updated_at
+        SELECT user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, embed_key, updated_at
         FROM integration_settings
         WHERE embed_key = $1
       `,

@@ -103,13 +103,11 @@ async function parseErrorResponse(response: Response): Promise<ApiError> {
 }
 
 async function performRequest(path: string, init: RequestInit, retryOnUnauthorized = true): Promise<Response> {
-  const token = authService.getAccessToken();
-
   const requestInit: RequestInit = {
     ...init,
+    credentials: "include",
     headers: {
       ...(init.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   };
 
@@ -149,7 +147,7 @@ async function performRequest(path: string, init: RequestInit, retryOnUnauthoriz
     );
   }
 
-  if (response.status === 401 && retryOnUnauthorized && authService.getRefreshToken()) {
+  if (response.status === 401 && retryOnUnauthorized) {
     try {
       await authService.refreshTokens();
       return performRequest(path, init, false);

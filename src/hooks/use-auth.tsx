@@ -56,25 +56,6 @@ function isAuthenticationFailure(error: unknown): boolean {
   return /unauthorized|invalid or missing authentication token/i.test(typedError.message || "");
 }
 
-function hydrateUserFromToken(): User | null {
-  const accessToken = authService.getAccessToken();
-  if (!accessToken) {
-    return null;
-  }
-
-  const payload = authService.decodeToken(accessToken);
-  if (!payload?.sub) {
-    return null;
-  }
-
-  return {
-    id: payload.sub,
-    email: payload.email || "",
-    fullName: payload.fullName || payload.email || "User",
-    role: payload.role || "USER",
-  };
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -83,47 +64,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const init = async () => {
       try {
-        const hasAccessToken = !!authService.getAccessToken();
-        const hasRefreshToken = !!authService.getRefreshToken();
-
-        if (!hasAccessToken && !hasRefreshToken) {
-          setUser(null);
-          setSubscription(null);
-          return;
-        }
-
-        if (!authService.isLoggedIn() && hasRefreshToken) {
-          await authService.refreshTokens();
-        }
-
-        const profile = await authService.getCurrentUser();
-        setUser({
-          id: profile.id,
-          email: profile.email,
-          fullName: profile.fullName,
-          role: profile.role,
-        });
-        identifyUser(profile.id, {
-          email: profile.email,
-          role: profile.role,
-        });
-
         try {
-          const sub = await subscriptionService.getCurrentSubscription();
-          setSubscription(sub);
+          const profile = await authService.getCurrentUser();
+          if (!profile?.id) {
+            setUser(null);
+            setSubscription(null);
+            return;
+          }
+          setUser({
+            id: profile.id,
+            email: profile.email,
+            fullName: profile.fullName,
+            role: profile.role,
+          });
+          identifyUser(profile.id, {
+            email: profile.email,
+            role: profile.role,
+          });
+
+          try {
+            const sub = await subscriptionService.getCurrentSubscription();
+            setSubscription(sub);
+          } catch (error) {
+            console.error("Failed to fetch subscription:", error);
+          }
+          return;
         } catch (error) {
-          console.error("Failed to fetch subscription:", error);
+          if (!isAuthenticationFailure(error)) {
+            throw error;
+          }
+
+          await authService.refreshTokens();
+          const profile = await authService.getCurrentUser();
+          if (!profile?.id) {
+            setUser(null);
+            setSubscription(null);
+            return;
+          }
+          setUser({
+            id: profile.id,
+            email: profile.email,
+            fullName: profile.fullName,
+            role: profile.role,
+          });
+          identifyUser(profile.id, {
+            email: profile.email,
+            role: profile.role,
+          });
+
+          try {
+            const sub = await subscriptionService.getCurrentSubscription();
+            setSubscription(sub);
+          } catch (subscriptionError) {
+            console.error("Failed to fetch subscription:", subscriptionError);
+          }
         }
       } catch (error) {
         console.error("Auth initialization failed:", error);
-
-        if (isAuthenticationFailure(error)) {
-          authService.clearTokens();
-          setUser(null);
-        } else {
-          setUser(hydrateUserFromToken());
-        }
-
+        authService.clearTokens();
+        setUser(null);
         setSubscription(null);
       } finally {
         setIsLoading(false);
@@ -142,7 +141,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: response.user.email,
         role: response.user.role,
       });
-      authService.setTokens(response.accessToken, response.refreshToken, rememberMe);
 
       try {
         const sub = await subscriptionService.getCurrentSubscription();
@@ -167,7 +165,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: response.user.email,
         role: response.user.role,
       });
-      authService.setTokens(response.accessToken, response.refreshToken);
 
       try {
         const sub = await subscriptionService.getCurrentSubscription();
@@ -180,6 +177,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    void Promise.resolve(authService.logout()).catch((error) => {
+      console.error("Logout request failed:", error);
+    });
     setUser(null);
     setSubscription(null);
     authService.clearTokens();
@@ -187,7 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshSubscription = async () => {
-    if (!authService.getAccessToken()) return;
+    if (!user) return;
     try {
       const sub = await subscriptionService.getCurrentSubscription();
       setSubscription(sub);

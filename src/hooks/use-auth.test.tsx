@@ -15,6 +15,7 @@ vi.mock("@/services/auth.service", () => ({
     clearTokens: vi.fn(),
     login: vi.fn(),
     register: vi.fn(),
+    logout: vi.fn(),
   },
 }));
 
@@ -59,20 +60,20 @@ describe("useAuth Hook", () => {
 
   describe("initialization", () => {
     it("should initialize with loading state", () => {
-      vi.mocked(authService.getAccessToken).mockReturnValue(null);
-      vi.mocked(authService.getRefreshToken).mockReturnValue(null);
+      vi.mocked(authService.getCurrentUser).mockResolvedValue(undefined as never);
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
-      expect(result.current.isLoading).toBe(false);
-      expect(result.current.isLoggedIn).toBe(false);
-      expect(result.current.user).toBeNull();
+      expect(result.current.isLoading).toBe(true);
+
+      return waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+        expect(result.current.isLoggedIn).toBe(false);
+        expect(result.current.user).toBeNull();
+      });
     });
 
-    it("should load user and subscription on mount if tokens exist", async () => {
-      vi.mocked(authService.getAccessToken).mockReturnValue("access-token");
-      vi.mocked(authService.getRefreshToken).mockReturnValue("refresh-token");
-      vi.mocked(authService.isLoggedIn).mockReturnValue(true);
+    it("should load user and subscription on mount when a session exists", async () => {
       vi.mocked(authService.getCurrentUser).mockResolvedValue(mockUser);
       vi.mocked(subscriptionService.getCurrentSubscription).mockResolvedValue(
         mockSubscription
@@ -89,12 +90,11 @@ describe("useAuth Hook", () => {
       expect(result.current.isLoggedIn).toBe(true);
     });
 
-    it("should refresh tokens if only refresh token exists", async () => {
-      vi.mocked(authService.getAccessToken).mockReturnValue(null);
-      vi.mocked(authService.getRefreshToken).mockReturnValue("refresh-token");
-      vi.mocked(authService.isLoggedIn).mockReturnValue(false);
-      vi.mocked(authService.refreshTokens).mockResolvedValue(undefined);
-      vi.mocked(authService.getCurrentUser).mockResolvedValue(mockUser);
+    it("should refresh the session after an unauthorized lookup", async () => {
+      vi.mocked(authService.getCurrentUser)
+        .mockRejectedValueOnce({ status: 401, message: "Unauthorized" })
+        .mockResolvedValueOnce(mockUser);
+      vi.mocked(authService.refreshTokens).mockResolvedValue({ accessToken: "new-access-token", refreshToken: "new-refresh-token" });
       vi.mocked(subscriptionService.getCurrentSubscription).mockResolvedValue(
         mockSubscription
       );
@@ -105,14 +105,11 @@ describe("useAuth Hook", () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(vi.mocked(authService.refreshTokens)).toHaveBeenCalled();
+      expect(vi.mocked(authService.refreshTokens)).toHaveBeenCalledTimes(1);
       expect(result.current.user).toEqual(mockUser);
     });
 
     it("should clear tokens and set user to null on unauthorized initialization failure", async () => {
-      vi.mocked(authService.getAccessToken).mockReturnValue("access-token");
-      vi.mocked(authService.getRefreshToken).mockReturnValue("refresh-token");
-      vi.mocked(authService.isLoggedIn).mockReturnValue(true);
       vi.mocked(authService.getCurrentUser).mockRejectedValue({ status: 401, message: "Unauthorized" });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
@@ -126,18 +123,8 @@ describe("useAuth Hook", () => {
       expect(result.current.isLoggedIn).toBe(false);
     });
 
-    it("should preserve token-based user on transient initialization failure", async () => {
-      vi.mocked(authService.getAccessToken).mockReturnValue("access-token");
-      vi.mocked(authService.getRefreshToken).mockReturnValue("refresh-token");
-      vi.mocked(authService.isLoggedIn).mockReturnValue(true);
+    it("should clear state on transient initialization failure", async () => {
       vi.mocked(authService.getCurrentUser).mockRejectedValue(new Error("Network error"));
-      vi.mocked(authService.decodeToken).mockReturnValue({
-        sub: "user-123",
-        email: "test@example.com",
-        fullName: "Test User",
-        role: "USER",
-        exp: Math.floor(Date.now() / 1000) + 3600,
-      });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -145,16 +132,15 @@ describe("useAuth Hook", () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(vi.mocked(authService.clearTokens)).not.toHaveBeenCalled();
-      expect(result.current.user).toEqual(mockUser);
-      expect(result.current.isLoggedIn).toBe(true);
+      expect(vi.mocked(authService.clearTokens)).toHaveBeenCalled();
+      expect(result.current.user).toBeNull();
+      expect(result.current.isLoggedIn).toBe(false);
     });
   });
 
   describe("login", () => {
     beforeEach(() => {
-      vi.mocked(authService.getAccessToken).mockReturnValue(null);
-      vi.mocked(authService.getRefreshToken).mockReturnValue(null);
+      vi.mocked(authService.getCurrentUser).mockResolvedValue(undefined as never);
     });
 
     it("should set user and subscription on successful login", async () => {
@@ -176,11 +162,6 @@ describe("useAuth Hook", () => {
       expect(result.current.user).toEqual(mockUser);
       expect(result.current.subscription).toEqual(mockSubscription);
       expect(result.current.isLoggedIn).toBe(true);
-      expect(vi.mocked(authService.setTokens)).toHaveBeenCalledWith(
-        "new-access-token",
-        "new-refresh-token",
-        true
-      );
     });
 
     it("should support rememberMe parameter", async () => {
@@ -199,11 +180,7 @@ describe("useAuth Hook", () => {
         await result.current.login("test@example.com", "password", false);
       });
 
-      expect(vi.mocked(authService.setTokens)).toHaveBeenCalledWith(
-        "new-access-token",
-        "new-refresh-token",
-        false
-      );
+      expect(vi.mocked(authService.setTokens)).not.toHaveBeenCalled();
     });
 
     it("should continue even if subscription fetch fails", async () => {
@@ -230,8 +207,7 @@ describe("useAuth Hook", () => {
 
   describe("register", () => {
     beforeEach(() => {
-      vi.mocked(authService.getAccessToken).mockReturnValue(null);
-      vi.mocked(authService.getRefreshToken).mockReturnValue(null);
+      vi.mocked(authService.getCurrentUser).mockResolvedValue(undefined as never);
     });
 
     it("should register user and set auth state", async () => {
@@ -253,19 +229,11 @@ describe("useAuth Hook", () => {
       expect(result.current.user).toEqual(mockUser);
       expect(result.current.subscription).toEqual(mockSubscription);
       expect(result.current.isLoggedIn).toBe(true);
-      expect(vi.mocked(authService.register)).toHaveBeenCalledWith(
-        "test@example.com",
-        "password",
-        "Test User"
-      );
     });
   });
 
   describe("logout", () => {
     it("should clear user, subscription, and tokens on logout", async () => {
-      vi.mocked(authService.getAccessToken).mockReturnValue("access-token");
-      vi.mocked(authService.getRefreshToken).mockReturnValue("refresh-token");
-      vi.mocked(authService.isLoggedIn).mockReturnValue(true);
       vi.mocked(authService.getCurrentUser).mockResolvedValue(mockUser);
       vi.mocked(subscriptionService.getCurrentSubscription).mockResolvedValue(
         mockSubscription
@@ -285,14 +253,12 @@ describe("useAuth Hook", () => {
       expect(result.current.subscription).toBeNull();
       expect(result.current.isLoggedIn).toBe(false);
       expect(vi.mocked(authService.clearTokens)).toHaveBeenCalled();
+      expect(vi.mocked(authService.logout)).toHaveBeenCalled();
     });
   });
 
   describe("refreshSubscription", () => {
     it("should update subscription when called", async () => {
-      vi.mocked(authService.getAccessToken).mockReturnValue("access-token");
-      vi.mocked(authService.getRefreshToken).mockReturnValue("refresh-token");
-      vi.mocked(authService.isLoggedIn).mockReturnValue(true);
       vi.mocked(authService.getCurrentUser).mockResolvedValue(mockUser);
       vi.mocked(subscriptionService.getCurrentSubscription).mockResolvedValue(
         mockSubscription
@@ -316,9 +282,8 @@ describe("useAuth Hook", () => {
       expect(result.current.subscription).toEqual(newSubscription);
     });
 
-    it("should do nothing if no access token", async () => {
-      vi.mocked(authService.getAccessToken).mockReturnValue(null);
-      vi.mocked(authService.getRefreshToken).mockReturnValue(null);
+    it("should do nothing if no user is loaded", async () => {
+      vi.mocked(authService.getCurrentUser).mockResolvedValue(undefined as never);
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -334,9 +299,6 @@ describe("useAuth Hook", () => {
 
   describe("isPro", () => {
     it("should return true for PRO subscription", async () => {
-      vi.mocked(authService.getAccessToken).mockReturnValue("access-token");
-      vi.mocked(authService.getRefreshToken).mockReturnValue("refresh-token");
-      vi.mocked(authService.isLoggedIn).mockReturnValue(true);
       vi.mocked(authService.getCurrentUser).mockResolvedValue(mockUser);
       vi.mocked(subscriptionService.getCurrentSubscription).mockResolvedValue(
         mockProSubscription
@@ -350,9 +312,6 @@ describe("useAuth Hook", () => {
     });
 
     it("should return false for FREE subscription", async () => {
-      vi.mocked(authService.getAccessToken).mockReturnValue("access-token");
-      vi.mocked(authService.getRefreshToken).mockReturnValue("refresh-token");
-      vi.mocked(authService.isLoggedIn).mockReturnValue(true);
       vi.mocked(authService.getCurrentUser).mockResolvedValue(mockUser);
       vi.mocked(subscriptionService.getCurrentSubscription).mockResolvedValue(
         mockSubscription

@@ -195,7 +195,7 @@ export default function Profile() {
                 </Button>
               )}
 
-              <Button variant="outline" onClick={logout}>Logout</Button>
+              <Button variant="destructive" onClick={logout}>Logout</Button>
               <Button
                 variant="destructive"
                 onClick={() => setConfirmDelete(true)}

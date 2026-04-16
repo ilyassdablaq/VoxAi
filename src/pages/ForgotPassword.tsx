@@ -8,6 +8,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { apiClient } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
+import { Seo } from "@/components/Seo";
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
@@ -58,6 +59,12 @@ const ForgotPassword = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <Seo
+        title="Reset Password"
+        description="Request a password reset link for your VoxAI account."
+        path="/forgot-password"
+        noindex
+      />
       <Navbar />
       <div className="flex-1 flex items-center justify-center py-12 section-padding">
         <motion.div

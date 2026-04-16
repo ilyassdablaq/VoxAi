@@ -1,6 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { PDFParse } from "pdf-parse";
 import OpenAI from "openai";
 import { XMLParser } from "fast-xml-parser";
@@ -13,109 +11,23 @@ import { prisma } from "../../infra/database/prisma.js";
 const EMBEDDING_DIMENSION = 1536;
 const CHUNK_WORDS = 400;
 const CHUNK_OVERLAP_WORDS = 70;
-const CRAWL_TIMEOUT_MS = 20000;
+const CRAWL_TIMEOUT_MS = 12000;
 const RETRIEVAL_CACHE_TTL_MS = 45_000;
 const RETRIEVAL_CACHE_MAX_ITEMS = 1_000;
 const EMBEDDING_CONCURRENCY = 4;
-const MAX_INGEST_BYTES = 25 * 1024 * 1024;
 
-const PROMPT_INJECTION_PATTERNS = [
-  /ignore\s+(all\s+|any\s+|previous\s+)?instructions?/i,
-  /disregard\s+(the\s+)?(system|developer)\s+instructions?/i,
-  /system\s+prompt/i,
-  /developer\s+message/i,
-  /override\s+policy/i,
-  /jailbreak/i,
-];
-
-const SCRIPT_INJECTION_PATTERNS = [
-  /<\s*script\b/i,
-  /javascript:/i,
-  /onerror\s*=/i,
-  /onload\s*=/i,
-  /<\s*iframe\b/i,
-];
-
-const PRIVATE_IP_RANGES = [
-  /^10\./,
-  /^127\./,
-  /^169\.254\./,
-  /^192\.168\./,
-  /^172\.(1[6-9]|2\d|3[0-1])\./,
-  /^100\.(6[4-9]|[7-9]\d|1\d\d|12[0-7])\./,
-];
-
-function isPrivateIp(address: string): boolean {
-  const normalized = address.toLowerCase();
-
-  if (PRIVATE_IP_RANGES.some((pattern) => pattern.test(normalized))) {
-    return true;
+function isTlsCertificateError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
   }
 
-  if (normalized === "::1" || normalized === "::" || normalized.startsWith("fe80:") || normalized.startsWith("fc") || normalized.startsWith("fd")) {
-    return true;
-  }
-
-  if (normalized.startsWith("::ffff:127.")) {
-    return true;
-  }
-
-  return false;
-}
-
-function isPrivateHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase();
-  return normalized === "localhost" || normalized.endsWith(".localhost") || normalized.endsWith(".local");
-}
-
-function isPromptInjectionContent(content: string): boolean {
-  const lower = content.toLowerCase();
-
-  if (SCRIPT_INJECTION_PATTERNS.some((pattern) => pattern.test(content))) {
-    return true;
-  }
-
-  let signalCount = 0;
-  for (const pattern of PROMPT_INJECTION_PATTERNS) {
-    if (pattern.test(lower)) {
-      signalCount += 1;
-    }
-  }
-
-  return signalCount >= 2;
-}
-
-function ensureContentSafety(content: string, source: string): void {
-  if (Buffer.byteLength(content, "utf8") > MAX_INGEST_BYTES) {
-    throw new AppError(413, "CONTENT_TOO_LARGE", `The ${source} content exceeds the ingestion size limit`);
-  }
-
-  if (isPromptInjectionContent(content)) {
-    throw new AppError(400, "UNTRUSTED_CONTENT_DETECTED", `The ${source} content contains suspicious instructions or embedded script content`);
-  }
-}
-
-async function assertSafeCrawlTarget(url: string): Promise<URL> {
-  const parsed = new URL(url);
-
-  if (!["http:", "https:"].includes(parsed.protocol)) {
-    throw new AppError(400, "INVALID_URL_PROTOCOL", "Only HTTP/HTTPS URLs are supported");
-  }
-
-  if (isPrivateHostname(parsed.hostname)) {
-    throw new AppError(400, "INVALID_CRAWL_TARGET", "Private or local hostnames are not allowed for crawling");
-  }
-
-  if (isIP(parsed.hostname) && isPrivateIp(parsed.hostname)) {
-    throw new AppError(400, "INVALID_CRAWL_TARGET", "Private IP addresses are not allowed for crawling");
-  }
-
-  const addresses = await lookup(parsed.hostname, { all: true });
-  if (addresses.some((entry) => isPrivateIp(entry.address))) {
-    throw new AppError(400, "INVALID_CRAWL_TARGET", "Private or internal network addresses are not allowed for crawling");
-  }
-
-  return parsed;
+  const message = `${error.message} ${error.cause instanceof Error ? error.cause.message : ""}`.toLowerCase();
+  return (
+    message.includes("certificate") ||
+    message.includes("self signed") ||
+    message.includes("unable to get local issuer") ||
+    message.includes("cert_")
+  );
 }
 
 function normalizeWhitespace(value: string): string {
@@ -250,9 +162,6 @@ export class RagService {
     if (!buffer.length) {
       throw new AppError(400, "EMPTY_FILE", "Uploaded file is empty");
     }
-    if (buffer.length > MAX_INGEST_BYTES) {
-      throw new AppError(413, "FILE_TOO_LARGE", "Uploaded file exceeds the ingestion size limit");
-    }
     return this.ingestFromBuffer({
       userId: input.userId,
       fileName: input.fileName,
@@ -305,8 +214,6 @@ export class RagService {
       throw new AppError(400, "EMPTY_DOCUMENT", "Could not extract text from the uploaded file");
     }
 
-    ensureContentSafety(extractedText, input.originalFileName);
-
     const result = await this.ingestPlainText({
       userId: input.userId,
       title: input.fileName,
@@ -352,8 +259,6 @@ export class RagService {
       throw new AppError(400, "EMPTY_DOCUMENT", "Structured input did not contain parsable text");
     }
 
-    ensureContentSafety(structuredText, input.title);
-
     const result = await this.ingestPlainText({
       userId: input.userId,
       title: input.title,
@@ -368,7 +273,10 @@ export class RagService {
 
   async ingestWebsite(input: { userId: string; url: string; maxPages: number }) {
     logger.info({ userId: input.userId, url: input.url, maxPages: input.maxPages }, "RAG website crawl started");
-    const rootUrl = await assertSafeCrawlTarget(input.url);
+    const rootUrl = new URL(input.url);
+    if (!["http:", "https:"].includes(rootUrl.protocol)) {
+      throw new AppError(400, "INVALID_URL_PROTOCOL", "Only HTTP/HTTPS URLs are supported");
+    }
 
     const visited = new Set<string>();
     const queue: string[] = [rootUrl.toString()];
@@ -394,29 +302,26 @@ export class RagService {
             Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
           },
-          redirect: "manual",
+          redirect: "follow",
           signal: controller.signal,
         };
 
-        response = await fetch(currentUrl, requestInit);
+        try {
+          response = await fetch(currentUrl, requestInit);
+        } catch (fetchError) {
+          if (isTlsCertificateError(fetchError)) {
+            logger.warn({ url: currentUrl }, "RAG crawl TLS certificate issue detected");
+            throw new AppError(
+              400,
+              "URL_TLS_CERT_INVALID",
+              "Could not crawl website due to invalid TLS certificate. Provide a URL with a valid certificate chain.",
+            );
+          } else {
+            throw fetchError;
+          }
+        }
 
         if (!response.ok) {
-          if (response.status >= 300 && response.status < 400) {
-            const location = response.headers.get("location");
-            if (location) {
-              try {
-                const redirectedUrl = await assertSafeCrawlTarget(new URL(location, currentUrl).toString());
-                if (redirectedUrl.origin === rootUrl.origin && !visited.has(redirectedUrl.toString()) && !queue.includes(redirectedUrl.toString())) {
-                  queue.push(redirectedUrl.toString());
-                }
-              } catch (redirectError) {
-                const reason = redirectError instanceof Error ? redirectError.message : "Unsafe redirect target";
-                crawlErrors.push({ url: currentUrl, reason });
-              }
-              continue;
-            }
-          }
-
           crawlErrors.push({ url: currentUrl, reason: `HTTP ${response.status}` });
           continue;
         }
@@ -460,7 +365,6 @@ export class RagService {
         );
 
         if (pageText && pageText.length > 20) {
-          ensureContentSafety(pageText, currentUrl);
           collectedPages.push({
             url: currentUrl,
             text: pageText,
@@ -518,8 +422,6 @@ export class RagService {
         crawlErrors: crawlErrors.slice(0, 5),
       });
     }
-
-    ensureContentSafety(merged, input.url);
 
     const result = await this.ingestPlainText({
       userId: input.userId,

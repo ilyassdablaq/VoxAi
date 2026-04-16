@@ -26,6 +26,7 @@
   var launcherIcon = currentScript.getAttribute("data-launcher-icon") || "chat";
   var initialMessage = (currentScript.getAttribute("data-initial-message") || "Hi. Send me a message and I will reply here.").trim();
   var maxSessionQuestionsValue = Number.parseInt(currentScript.getAttribute("data-max-session-questions") || "3", 10);
+  var microphoneEnabled = (currentScript.getAttribute("data-microphone-enabled") || "false").toLowerCase() === "true";
   var loadingStyle = (currentScript.getAttribute("data-loading-style") || "free").toLowerCase();
   var maxSessionQuestions = Number.isFinite(maxSessionQuestionsValue) ? Math.max(1, maxSessionQuestionsValue) : 3;
   var side = position === "bottom-left" ? "left" : "right";
@@ -51,6 +52,7 @@
   var styles = document.createElement("style");
   styles.textContent = "\n    :host, * { box-sizing: border-box; }\n    .shell { display: flex; flex-direction: column; align-items: end; gap: 12px; }\n    .panel {\n      display: none;\n      width: min(340px, calc(100vw - 32px));\n      height: min(490px, calc(100vh - 96px));\n      background: #f8fafc;\n      border: 1px solid rgba(148, 163, 184, 0.35);\n      border-radius: 22px;\n      box-shadow: 0 30px 60px rgba(15, 23, 42, 0.22);\n      overflow: hidden;\n      backdrop-filter: blur(18px);\n    }\n    .panel.open { display: flex; flex-direction: column; }\n    .header {\n      min-height: 56px;\n      padding: 0 16px;\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      background: linear-gradient(135deg, var(--theme), color-mix(in srgb, var(--theme) 72%, #ffffff 28%));\n      color: #fff;\n    }\n    .header-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }\n    .header-copy { display: flex; flex-direction: column; gap: 1px; }\n    .status-pill {\n      font-size: 11px;\n      font-weight: 600;\n      padding: 6px 10px;\n      border-radius: 999px;\n      background: rgba(255, 255, 255, 0.18);\n      border: 1px solid rgba(255, 255, 255, 0.18);\n      white-space: nowrap;\n    }\n    .messages {\n      flex: 1;\n      overflow-y: auto;\n      padding: 14px;\n      display: flex;\n      flex-direction: column;\n      gap: 12px;\n      background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);\n    }\n    .row { display: flex; }\n    .row.user { justify-content: flex-end; }\n    .row.assistant { justify-content: flex-start; }\n    .bubble {\n      max-width: 82%;\n      padding: 11px 13px;\n      border-radius: 14px;\n      font-size: 13px;\n      line-height: 1.45;\n      white-space: pre-wrap;\n      word-break: break-word;\n      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);\n    }\n    .bubble.user {\n      color: #fff;\n      background: var(--theme);\n      border-bottom-right-radius: 6px;\n    }\n    .bubble.assistant {\n      color: #1e293b;\n      background: #e5e7eb;\n      border-bottom-left-radius: 6px;\n    }\n    .bubble.system {\n      color: #475569;\n      background: #eef2ff;\n      border: 1px solid rgba(99, 102, 241, 0.16);\n    }\n    .typing { display: inline-flex; align-items: center; gap: 4px; min-width: 44px; }\n    .dot { width: 6px; height: 6px; border-radius: 999px; background: #94a3b8; animation: bounce 1s infinite ease-in-out; }\n    .dot:nth-child(2) { animation-delay: 120ms; }\n    .dot:nth-child(3) { animation-delay: 240ms; }\n    @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.45; } 40% { transform: translateY(-4px); opacity: 1; } }\n    .composer {\n      border-top: 1px solid rgba(148, 163, 184, 0.22);\n      background: rgba(255, 255, 255, 0.92);\n      padding: 10px;\n      display: flex;\n      gap: 8px;\n      align-items: center;\n    }\n    .input {\n      flex: 1;\n      min-height: 42px;\n      border: 1px solid rgba(148, 163, 184, 0.45);\n      border-radius: 12px;\n      padding: 0 12px;\n      background: #fff;\n      color: #0f172a;\n      outline: none;\n      font-size: 14px;\n      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);\n    }\n    .input:focus { border-color: var(--theme); box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme) 20%, transparent); }\n    .send {\n      min-width: 64px;\n      min-height: 42px;\n      padding: 0 14px;\n      border: 0;\n      border-radius: 12px;\n      cursor: pointer;\n      color: #fff;\n      background: var(--theme);\n      font-weight: 700;\n      font-size: 14px;\n      box-shadow: 0 10px 24px color-mix(in srgb, var(--theme) 25%, transparent);\n    }\n    .send:disabled { opacity: 0.6; cursor: not-allowed; }\n    .launcher {\n      width: 56px;\n      height: 56px;\n      border-radius: 999px;\n      border: 0;\n      cursor: pointer;\n      color: #fff;\n      background: linear-gradient(135deg, var(--theme), color-mix(in srgb, var(--theme) 72%, #ffffff 28%));\n      box-shadow: 0 18px 30px rgba(15, 23, 42, 0.2);\n      display: inline-flex;\n      align-items: center;\n      justify-content: center;\n      font-weight: 700;\n      letter-spacing: 0.01em;\n    }\n    .launcher svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; }\n    .empty { color: #64748b; font-size: 13px; line-height: 1.5; padding: 8px 4px; }\n  ";
   styles.textContent += "\n    .typing-bubble { background: var(--loading-bg, #ffffff) !important; border: 1px solid var(--loading-border, #e2e8f0) !important; }\n    .typing-bubble .dot { background: var(--loading-dot, #94a3b8) !important; }\n  ";
+  styles.textContent += "\n    .voice {\n      width: 36px;\n      height: 36px;\n      border: 1px solid transparent;\n      border-radius: 12px;\n      cursor: pointer;\n      color: #fff;\n      background: var(--theme);\n      display: inline-flex;\n      align-items: center;\n      justify-content: center;\n      box-shadow: none;\n      flex-shrink: 0;\n    }\n    .voice svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }\n  ";
 
   var shell = document.createElement("div");
   shell.className = "shell";
@@ -111,6 +113,23 @@
   send.type = "submit";
   send.innerText = "Send";
 
+  var voiceButton = null;
+  var speechRecognitionSupported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  if (microphoneEnabled) {
+    voiceButton = document.createElement("button");
+    voiceButton.className = "voice";
+    voiceButton.type = "button";
+    voiceButton.setAttribute("aria-label", "Start voice input");
+    if (!speechRecognitionSupported) {
+      voiceButton.disabled = true;
+      voiceButton.title = "Speech recognition is not supported in this browser.";
+    }
+    voiceButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0"/><path d="M12 19v3M8 22h8"/></svg>';
+  }
+
+  if (voiceButton) {
+    composer.appendChild(voiceButton);
+  }
   composer.appendChild(input);
   composer.appendChild(send);
 
@@ -174,6 +193,9 @@
     input.style.background = "#1e293b";
     input.style.color = "#e2e8f0";
     input.style.border = "1px solid rgba(100, 116, 139, 0.72)";
+    if (voiceButton) {
+      voiceButton.style.border = "1px solid rgba(71, 85, 105, 0.85)";
+    }
   }
 
   launcher.innerHTML = "";
@@ -212,12 +234,99 @@
   var sessionCompleted = false;
   var isOpen = false;
   var isPending = false;
+  var recognition = null;
+  var isListening = false;
+
+  function getSpeechRecognitionConstructor() {
+    return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  }
+
+  function getSpeechRecognitionLocale() {
+    var localeMap = {
+      en: "en-US",
+      de: "de-DE",
+      fr: "fr-FR",
+      ar: "ar-SA",
+    };
+
+    return localeMap[language] || language || "en-US";
+  }
+
+  function setVoiceButtonState(listening) {
+    if (!voiceButton) {
+      return;
+    }
+
+    isListening = listening;
+
+    voiceButton.innerHTML = listening
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0"/><path d="M12 19v3M8 22h8"/></svg>';
+    voiceButton.setAttribute("aria-label", listening ? "Stop voice input" : "Start voice input");
+  }
+
+  function ensureRecognition() {
+    if (recognition || !microphoneEnabled) {
+      return recognition;
+    }
+
+    var SpeechRecognition = getSpeechRecognitionConstructor();
+    if (!SpeechRecognition) {
+      return null;
+    }
+
+    recognition = new SpeechRecognition();
+    recognition.lang = getSpeechRecognitionLocale();
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = function (event) {
+      var transcript = event.results[0] && event.results[0][0] && event.results[0][0].transcript ? event.results[0][0].transcript.trim() : "";
+      if (transcript) {
+        input.value = transcript;
+      }
+    };
+
+    recognition.onerror = function () {
+      setVoiceButtonState(false);
+    };
+
+    recognition.onend = function () {
+      setVoiceButtonState(false);
+    };
+
+    return recognition;
+  }
 
   function updateComposerAvailability() {
     var limitReached = sessionCompleted || userQuestionCount >= maxSessionQuestions;
     input.disabled = limitReached || isPending;
     send.disabled = limitReached || isPending;
+    if (voiceButton) {
+      voiceButton.disabled = !speechRecognitionSupported || limitReached || isPending;
+    }
     input.placeholder = limitReached ? "Session ended (" + maxSessionQuestions + "/" + maxSessionQuestions + ")." : "Type your message...";
+  }
+
+  if (voiceButton) {
+    voiceButton.addEventListener("click", function () {
+      var activeRecognition = ensureRecognition();
+      if (!activeRecognition) {
+        return;
+      }
+
+      if (isListening) {
+        activeRecognition.stop();
+        return;
+      }
+
+      try {
+        setVoiceButtonState(true);
+        activeRecognition.start();
+      } catch (_error) {
+        setVoiceButtonState(false);
+      }
+    });
   }
 
   function setOpen(nextOpen) {

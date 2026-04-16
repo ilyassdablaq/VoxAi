@@ -13,7 +13,10 @@ COPY tsconfig.json ./
 COPY eslint.config.js ./
 
 RUN npm run build
+RUN chown -R node:node /app
 
 EXPOSE 4000
+
+USER node
 
 CMD ["npm", "run", "start"]

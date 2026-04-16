@@ -3,7 +3,13 @@ import { AppError } from "../errors/app-error.js";
 
 export async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
   try {
-    await request.jwtVerify();
+    const accessToken = (request as FastifyRequest & { cookies?: { accessToken?: string } }).cookies?.accessToken;
+
+    if (!accessToken) {
+      throw new AppError(401, "UNAUTHORIZED", "Invalid or missing authentication token");
+    }
+
+    request.user = (await request.server.jwt.verify(accessToken)) as FastifyRequest["user"];
   } catch {
     throw new AppError(401, "UNAUTHORIZED", "Invalid or missing authentication token");
   }

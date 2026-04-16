@@ -11,6 +11,7 @@ export interface IntegrationSettings {
   launcherIcon: "chat" | "message" | "sparkles" | "none";
   initialBotMessage: string;
   maxSessionQuestions: number;
+  microphoneEnabled: boolean;
   embedKey: string;
   updatedAt: string;
 }
@@ -30,6 +31,7 @@ export const integrationService = {
     launcherIcon: "chat" | "message" | "sparkles" | "none";
     initialBotMessage: string;
     maxSessionQuestions: number;
+    microphoneEnabled: boolean;
   }) {
     return apiClient.put<IntegrationSettings>("/api/integrations/settings", payload);
   },

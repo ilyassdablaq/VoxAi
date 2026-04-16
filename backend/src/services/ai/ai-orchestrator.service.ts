@@ -18,7 +18,8 @@ import {
   applyInputGuardrails,
   applyOutputGuardrails,
   buildGuardrailSystemDirectives,
-  sanitizeContextSnippets,
+  buildRetrievedContextEnvelope,
+  filterRetrievedContexts,
 } from "./guardrails.service.js";
 
 const EMPTY_MP3_BASE64 = "SUQzAwAAAAAA";
@@ -72,8 +73,16 @@ export class AiOrchestratorService {
     const sttResult = await this.transcribe(input.audioChunk, input.language);
     const safeTranscript = applyInputGuardrails(sttResult.text);
 
-    const contexts = sanitizeContextSnippets(await this.ragService.retrieveContext(input.userId, safeTranscript, 3));
-    const ragContext = `${buildGuardrailSystemDirectives()}\n\n${this.ragService.buildPrompt(safeTranscript, contexts)}`;
+    const contexts = filterRetrievedContexts(await this.ragService.retrieveContext(input.userId, safeTranscript, 3), {
+      mode: "strict",
+      maxContexts: 3,
+      maxContextChars: 1200,
+    });
+    const ragContext = `${buildGuardrailSystemDirectives()}\n\n${buildRetrievedContextEnvelope(safeTranscript, contexts, {
+      mode: "strict",
+      maxContexts: 3,
+      maxContextChars: 1200,
+    })}`;
     const llmOptions = await this.resolveLlmOptions(input.userId);
 
     const llmMessages = input.history?.length
@@ -120,8 +129,16 @@ export class AiOrchestratorService {
     history?: Array<{ role: "USER" | "ASSISTANT" | "SYSTEM"; content: string }>;
   }) {
     const safeText = applyInputGuardrails(input.text);
-    const contexts = sanitizeContextSnippets(await this.ragService.retrieveContext(input.userId, safeText, 3));
-    const ragContext = `${buildGuardrailSystemDirectives()}\n\n${this.ragService.buildPrompt(safeText, contexts)}`;
+    const contexts = filterRetrievedContexts(await this.ragService.retrieveContext(input.userId, safeText, 3), {
+      mode: "strict",
+      maxContexts: 3,
+      maxContextChars: 1200,
+    });
+    const ragContext = `${buildGuardrailSystemDirectives()}\n\n${buildRetrievedContextEnvelope(safeText, contexts, {
+      mode: "strict",
+      maxContexts: 3,
+      maxContextChars: 1200,
+    })}`;
     const llmOptions = await this.resolveLlmOptions(input.userId);
 
     const llmMessages = input.history?.length
@@ -170,8 +187,16 @@ export class AiOrchestratorService {
     onToken: (token: string) => void,
   ) {
     const safeText = applyInputGuardrails(input.text);
-    const contexts = sanitizeContextSnippets(await this.ragService.retrieveContext(input.userId, safeText, 3));
-    const ragContext = `${buildGuardrailSystemDirectives()}\n\n${this.ragService.buildPrompt(safeText, contexts)}`;
+    const contexts = filterRetrievedContexts(await this.ragService.retrieveContext(input.userId, safeText, 3), {
+      mode: "strict",
+      maxContexts: 3,
+      maxContextChars: 1200,
+    });
+    const ragContext = `${buildGuardrailSystemDirectives()}\n\n${buildRetrievedContextEnvelope(safeText, contexts, {
+      mode: "strict",
+      maxContexts: 3,
+      maxContextChars: 1200,
+    })}`;
     const llmOptions = await this.resolveLlmOptions(input.userId);
 
     const llmMessages = input.history?.length

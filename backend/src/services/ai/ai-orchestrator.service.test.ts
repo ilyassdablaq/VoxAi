@@ -55,6 +55,19 @@ describe("AiOrchestratorService", () => {
     buildPrompt: vi.fn(),
   };
 
+  const createService = () => {
+    const service = new AiOrchestratorService(ragService as any);
+    (service as any).planCheckService = {
+      getEffectivePlanAccess: vi.fn().mockResolvedValue({
+        type: "FREE",
+        key: "free",
+        source: "subscription",
+      }),
+    };
+
+    return service;
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -99,7 +112,7 @@ describe("AiOrchestratorService", () => {
   });
 
   it("runs text-turn pipeline with RAG retrieval, prompting, LLM generation, and TTS", async () => {
-    const service = new AiOrchestratorService(ragService as any);
+    const service = createService();
 
     const result = await service.processTextTurn({
       userId: "user-a",
@@ -108,15 +121,16 @@ describe("AiOrchestratorService", () => {
     });
 
     expect(ragService.retrieveContext).toHaveBeenCalledWith("user-a", "What is the refund policy?", 3);
-    expect(ragService.buildPrompt).toHaveBeenCalledWith("What is the refund policy?", [
-      "Policy: refunds within 30 days",
-      "Support: email support available",
-    ]);
 
     expect(mockProviders.llm.generateResponseWithUsage).toHaveBeenCalledTimes(1);
     const [systemContext, messages] = mockProviders.llm.generateResponseWithUsage.mock.calls[0] as [string, Array<{ role: string; content: string }>];
-    expect(systemContext).toContain("Context:");
+    expect(systemContext).toContain("Security policy:");
+    expect(systemContext).toContain("Retrieved context policy:");
+    expect(systemContext).toContain("Retrieved context:");
     expect(systemContext).toContain("Respond primarily in en");
+    expect(systemContext).toContain("Policy: refunds within 30 days");
+    expect(systemContext).toContain("Support: email support available");
+    expect(systemContext).toContain("User message:");
     expect(messages).toEqual([{ role: "user", content: "What is the refund policy?" }]);
 
     expect(mockProviders.tts.speakWithMetadata).toHaveBeenCalledWith(
@@ -132,7 +146,7 @@ describe("AiOrchestratorService", () => {
   });
 
   it("uses conversation history roles when provided", async () => {
-    const service = new AiOrchestratorService(ragService as any);
+    const service = createService();
 
     await service.processTextTurn({
       userId: "user-history",
@@ -155,7 +169,7 @@ describe("AiOrchestratorService", () => {
 
   it("falls back to mock LLM response when primary LLM provider fails", async () => {
     mockProviders.llm.generateResponseWithUsage.mockRejectedValue(new Error("upstream llm outage"));
-    const service = new AiOrchestratorService(ragService as any);
+    const service = createService();
 
     const result = await service.processTextTurn({
       userId: "user-llm-fallback",
@@ -169,7 +183,7 @@ describe("AiOrchestratorService", () => {
 
   it("returns silent fallback audio when TTS provider fails", async () => {
     mockProviders.tts.speakWithMetadata.mockRejectedValue(new Error("tts failure"));
-    const service = new AiOrchestratorService(ragService as any);
+    const service = createService();
 
     const result = await service.processTextTurn({
       userId: "user-tts-fallback",
@@ -197,7 +211,7 @@ describe("AiOrchestratorService", () => {
     });
 
     const onToken = vi.fn();
-    const service = new AiOrchestratorService(ragService as any);
+    const service = createService();
 
     const result = await service.streamTextTurn(
       {
@@ -221,7 +235,7 @@ describe("AiOrchestratorService", () => {
       durationSeconds: 2.5,
     });
 
-    const service = new AiOrchestratorService(ragService as any);
+    const service = createService();
     const result = await service.processVoiceTurn({
       userId: "user-voice",
       audioChunk: Buffer.from("fake-audio"),

@@ -2,49 +2,22 @@ name: Keep Backend Alive
 
 on:
   schedule:
-    # Führe alle 10 Minuten aus (vor der 15-min Render-Grenze)
-    - cron: '*/10 * * * *'
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 jobs:
-  keep-alive:
+  ping-backend:
+    name: Ping backend health endpoint
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     steps:
-      - name: Validate BACKEND_URL secret
+      - name: Ping /health endpoint
         env:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
         run: |
-          if [ -z "$BACKEND_URL" ]; then
-            echo "Missing required secret: BACKEND_URL"
-            exit 1
-          fi
+          TARGET_URL="${BACKEND_URL:-https://voxflow-ai-site.onrender.com}"
+          HEALTH_URL="${TARGET_URL%/}/health"
 
-      - name: Ping Backend Health Endpoint
-        env:
-          BACKEND_URL: ${{ secrets.BACKEND_URL }}
-        run: |
-          BASE_URL="${BACKEND_URL%/}"
-          HEALTH_URL="$BASE_URL/health"
-          echo "Pinging backend at: $HEALTH_URL"
-
-          response=$(curl -sS -o /dev/null -w "%{http_code}" \
-            --connect-timeout 10 \
-            --max-time 20 \
-            --retry 3 \
-            --retry-all-errors \
-            "$HEALTH_URL")
-
-          if [ "$response" = "200" ]; then
-            echo "Backend is alive (HTTP $response)"
-          else
-            echo "Backend returned HTTP $response"
-            exit 1
-          fi
-
-      - name: Log Success
-        if: success()
-        run: echo "Keep-alive check completed successfully at $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-
-      - name: Log Failure
-        if: failure()
-        run: echo "Keep-alive check failed. Verify BACKEND_URL and endpoint availability."
+          echo "Pinging ${HEALTH_URL}"
+          curl --fail --silent --show-error --max-time 30 --retry 3 --retry-delay 5 "${HEALTH_URL}"

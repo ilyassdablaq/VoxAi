@@ -3,6 +3,7 @@ import { Mic, Brain, Globe, Code2, BarChart3, Shield, Headphones, Workflow } fro
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SectionHeading from "@/components/SectionHeading";
+import { Seo } from "@/components/Seo";
 
 const features = [
   { icon: Mic, title: "Real-Time Speech-to-Text", desc: "Industry-leading accuracy with sub-200ms latency. Supports 30+ languages with automatic detection and dialect handling." },
@@ -23,6 +24,11 @@ const fadeUp = {
 
 const Features = () => (
   <div className="min-h-screen bg-background">
+    <Seo
+      title="Features"
+      description="Explore VoxAI features including real-time speech-to-text, text-to-speech, multilingual support, APIs, analytics, and enterprise security."
+      path="/features"
+    />
     <Navbar />
 
     <section className="pt-28 section-padding">

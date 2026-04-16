@@ -4,6 +4,7 @@ import { ArrowRight, Bot, Database, Globe, Mic, PlugZap, ShoppingBag, LifeBuoy, 
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SectionHeading from "@/components/SectionHeading";
+import { Seo } from "@/components/Seo";
 import { Button } from "@/components/ui/button";
 
 const steps = [
@@ -74,9 +75,57 @@ const fadeUp = {
   viewport: { once: true },
 };
 
+const homeStructuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      name: "VoxAI",
+      url: "https://voxflow-ai-site.vercel.app/",
+      logo: "https://voxflow-ai-site.vercel.app/og-image.svg",
+      sameAs: [],
+    },
+    {
+      "@type": "WebSite",
+      name: "VoxAI",
+      url: "https://voxflow-ai-site.vercel.app/",
+      inLanguage: "en",
+    },
+    {
+      "@type": "SoftwareApplication",
+      name: "VoxAI",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      url: "https://voxflow-ai-site.vercel.app/",
+      description:
+        "AI voice chatbot platform for support, sales, and workflow automation.",
+      offers: [
+        {
+          "@type": "Offer",
+          name: "Free",
+          price: "0",
+          priceCurrency: "EUR",
+        },
+        {
+          "@type": "Offer",
+          name: "Pro",
+          price: "49",
+          priceCurrency: "EUR",
+        },
+      ],
+    },
+  ],
+};
+
 export default function Index() {
   return (
     <div className="min-h-screen bg-background">
+      <Seo
+        title="AI Voice Chatbots for Business Growth"
+        description="Build, train, and launch an AI voice chatbot with speech-to-text, text-to-speech, RAG, and one-line website embedding."
+        path="/"
+        structuredData={homeStructuredData}
+      />
       <Navbar />
 
       <section className="pt-28 pb-16 section-padding relative overflow-hidden">
@@ -100,22 +149,12 @@ export default function Index() {
                 </Link>
               </Button>
               <Button size="lg" variant="outline" asChild>
-                <Link to="/sign-up">Create Your Chatbot</Link>
+                <Link to="/sign-in">Sign In</Link>
               </Button>
             </div>
           </motion.div>
 
-          <motion.div {...fadeUp} transition={{ delay: 0.2 }} className="mt-12 grid gap-4 sm:grid-cols-3">
-            {[
-              "Businesses create their own chatbot",
-              "Train with files, structured data, or website URLs",
-              "Embed and go live in minutes",
-            ].map((value) => (
-              <div key={value} className="glass rounded-lg px-4 py-4 text-sm text-foreground text-center">
-                {value}
-              </div>
-            ))}
-          </motion.div>
+
         </div>
       </section>
 

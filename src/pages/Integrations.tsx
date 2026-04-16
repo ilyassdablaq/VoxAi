@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { integrationService } from "@/services/integration.service";
@@ -97,6 +98,7 @@ export default function Integrations() {
   const [launcherIcon, setLauncherIcon] = useState<"chat" | "message" | "sparkles" | "none">("chat");
   const [initialBotMessage, setInitialBotMessage] = useState(DEFAULT_INITIAL_BOT_MESSAGE);
   const [maxSessionQuestions, setMaxSessionQuestions] = useState(DEFAULT_MAX_SESSION_QUESTIONS);
+  const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
 
   const loadingStyle = useMemo(() => {
     if (subscription?.effectivePlan === "ENTERPRISE") {
@@ -128,6 +130,7 @@ export default function Integrations() {
     setLauncherIcon((previous) => data.launcherIcon || previous || "chat");
     setInitialBotMessage(data.initialBotMessage?.trim() || DEFAULT_INITIAL_BOT_MESSAGE);
     setMaxSessionQuestions(Number.isFinite(data.maxSessionQuestions) ? Math.min(20, Math.max(1, data.maxSessionQuestions)) : DEFAULT_MAX_SESSION_QUESTIONS);
+    setMicrophoneEnabled(Boolean(data.microphoneEnabled));
   }, [data]);
 
   const effectiveData = useMemo(() => {
@@ -150,9 +153,10 @@ export default function Integrations() {
           launcherIcon: nextLauncherIcon,
           initialBotMessage: nextInitialBotMessage,
           maxSessionQuestions: nextMaxSessionQuestions,
+          microphoneEnabled,
         }
       : null;
-  }, [botName, data, initialBotMessage, language, launcherIcon, launcherText, maxSessionQuestions, position, themeColor, themeMode]);
+  }, [botName, data, initialBotMessage, language, launcherIcon, launcherText, maxSessionQuestions, microphoneEnabled, position, themeColor, themeMode]);
 
   const selectedThemePreset = useMemo(() => {
     const normalized = (themeColor || data?.themeColor || "").toLowerCase();
@@ -173,6 +177,7 @@ export default function Integrations() {
         launcherIcon: launcherIcon || data?.launcherIcon || "chat",
         initialBotMessage: initialBotMessage.trim() || data?.initialBotMessage || DEFAULT_INITIAL_BOT_MESSAGE,
         maxSessionQuestions: Math.min(20, Math.max(1, maxSessionQuestions)),
+        microphoneEnabled,
       }),
     onSuccess: (updated) => {
       const nextInitialBotMessage = initialBotMessage.trim() || DEFAULT_INITIAL_BOT_MESSAGE;
@@ -184,6 +189,7 @@ export default function Integrations() {
         maxSessionQuestions: Number.isFinite(updated.maxSessionQuestions)
           ? Math.min(20, Math.max(1, updated.maxSessionQuestions))
           : nextMaxSessionQuestions,
+        microphoneEnabled: Boolean(updated.microphoneEnabled),
       };
 
       void queryClient.setQueryData(["integration-settings"], normalized);
@@ -196,6 +202,7 @@ export default function Integrations() {
       setLauncherIcon(updated.launcherIcon ?? launcherIcon ?? "chat");
       setInitialBotMessage(normalized.initialBotMessage);
       setMaxSessionQuestions(normalized.maxSessionQuestions);
+      setMicrophoneEnabled(normalized.microphoneEnabled);
       toast({ title: "Saved", description: "Integration settings updated." });
     },
     onError: (error) => {
@@ -229,7 +236,7 @@ export default function Integrations() {
 
     const scriptHost = typeof window !== "undefined" ? window.location.origin : "https://yourapp.com";
 
-    return `<script src="${scriptHost}/chatbot.js" data-embed-key="${escapeHtmlAttribute(effectiveData.embedKey)}" data-api-base="${escapeHtmlAttribute(API_BASE)}" data-theme="${escapeHtmlAttribute(effectiveData.themeColor)}" data-theme-mode="${escapeHtmlAttribute(effectiveData.themeMode)}" data-position="${escapeHtmlAttribute(effectiveData.position)}" data-language="${escapeHtmlAttribute(effectiveData.language)}" data-bot-name="${escapeHtmlAttribute(effectiveData.botName)}" data-launcher-text="${escapeHtmlAttribute(effectiveData.launcherText)}" data-launcher-icon="${escapeHtmlAttribute(effectiveData.launcherIcon)}" data-initial-message="${escapeHtmlAttribute(effectiveData.initialBotMessage || DEFAULT_INITIAL_BOT_MESSAGE)}" data-max-session-questions="${effectiveData.maxSessionQuestions}" data-loading-style="${loadingStyle}"><\/script>`;
+    return `<script src="${scriptHost}/chatbot.js" data-embed-key="${escapeHtmlAttribute(effectiveData.embedKey)}" data-api-base="${escapeHtmlAttribute(API_BASE)}" data-theme="${escapeHtmlAttribute(effectiveData.themeColor)}" data-theme-mode="${escapeHtmlAttribute(effectiveData.themeMode)}" data-position="${escapeHtmlAttribute(effectiveData.position)}" data-language="${escapeHtmlAttribute(effectiveData.language)}" data-bot-name="${escapeHtmlAttribute(effectiveData.botName)}" data-launcher-text="${escapeHtmlAttribute(effectiveData.launcherText)}" data-launcher-icon="${escapeHtmlAttribute(effectiveData.launcherIcon)}" data-initial-message="${escapeHtmlAttribute(effectiveData.initialBotMessage || DEFAULT_INITIAL_BOT_MESSAGE)}" data-max-session-questions="${effectiveData.maxSessionQuestions}" data-microphone-enabled="${String(effectiveData.microphoneEnabled)}" data-loading-style="${loadingStyle}"><\/script>`;
   }, [effectiveData, loadingStyle]);
 
   const copySnippet = async () => {
@@ -399,6 +406,14 @@ export default function Integrations() {
               </div>
             </div>
 
+            <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Enable Microphone</label>
+                <p className="text-xs text-muted-foreground">Show voice input in the chatbot for browsers that support it.</p>
+              </div>
+              <Switch checked={microphoneEnabled} onCheckedChange={setMicrophoneEnabled} aria-label="Enable microphone" />
+            </div>
+
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !canSave} className="min-h-11">
                 {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -432,6 +447,7 @@ export default function Integrations() {
               launcherIcon={effectiveData?.launcherIcon ?? data.launcherIcon ?? "chat"}
               initialBotMessage={effectiveData?.initialBotMessage ?? data.initialBotMessage ?? DEFAULT_INITIAL_BOT_MESSAGE}
               maxSessionQuestions={effectiveData?.maxSessionQuestions ?? data.maxSessionQuestions ?? DEFAULT_MAX_SESSION_QUESTIONS}
+              microphoneEnabled={effectiveData?.microphoneEnabled ?? data.microphoneEnabled ?? false}
               themeMode={effectiveData?.themeMode ?? data.themeMode ?? "light"}
               loadingStyle={loadingStyle}
             />

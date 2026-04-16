@@ -8,6 +8,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { Seo } from "@/components/Seo";
 
 const SignUp = () => {
   const navigate = useNavigate();
@@ -83,6 +84,12 @@ const SignUp = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <Seo
+        title="Create Account"
+        description="Create a VoxAI account and start building, training, and deploying AI voice chatbots for your business."
+        path="/sign-up"
+        noindex
+      />
       <Navbar />
       <div className="flex-1 flex items-center justify-center py-12 section-padding">
         <motion.div

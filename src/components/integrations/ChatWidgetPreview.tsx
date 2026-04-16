@@ -1,4 +1,4 @@
-import { MessageCircle, MessageSquare, Sparkles } from "lucide-react";
+import { MessageCircle, MessageSquare, Mic, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatWidgetPreviewProps {
@@ -11,6 +11,7 @@ interface ChatWidgetPreviewProps {
   launcherIcon: "chat" | "message" | "sparkles" | "none";
   initialBotMessage: string;
   maxSessionQuestions: number;
+  microphoneEnabled: boolean;
   loadingStyle?: "free" | "pro" | "enterprise";
 }
 
@@ -46,7 +47,7 @@ function isLightColor(color: string) {
   return luminance > 0.64;
 }
 
-export function ChatWidgetPreview({ botName, themeColor, themeMode, position, language, launcherText, launcherIcon, initialBotMessage, maxSessionQuestions, loadingStyle = "free" }: ChatWidgetPreviewProps) {
+export function ChatWidgetPreview({ botName, themeColor, themeMode, position, language, launcherText, launcherIcon, initialBotMessage, maxSessionQuestions, microphoneEnabled, loadingStyle = "free" }: ChatWidgetPreviewProps) {
   const textTone = isLightColor(themeColor) ? "#0f172a" : "#ffffff";
   const accentTone = isLightColor(themeColor) ? "rgba(15, 23, 42, 0.18)" : "rgba(255, 255, 255, 0.18)";
   const launcherLabel = launcherText.trim();
@@ -144,6 +145,16 @@ export function ChatWidgetPreview({ botName, themeColor, themeMode, position, la
 
           <div className={cn("border-t p-3", isDarkMode ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white")}>
             <div className={cn("flex items-center gap-2 rounded-2xl border px-3 py-2.5", isDarkMode ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-slate-50")}>
+              {microphoneEnabled ? (
+                <button
+                  type="button"
+                  className={cn("flex h-9 w-9 items-center justify-center rounded-xl border text-white", isDarkMode ? "border-slate-600" : "border-transparent")}
+                  style={{ background: themeColor }}
+                  aria-label="Microphone enabled"
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
+              ) : null}
               <span className={cn("text-xs font-medium uppercase tracking-[0.18em]", isDarkMode ? "text-slate-400" : "text-slate-400")}>Type your message...</span>
               <div className="ml-auto rounded-xl px-3 py-2 text-xs font-semibold text-white" style={{ background: themeColor }}>
                 Send
@@ -183,6 +194,10 @@ export function ChatWidgetPreview({ botName, themeColor, themeMode, position, la
         <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-slate-100 backdrop-blur">
           <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Session Limit</p>
           <p className="mt-1 text-sm font-semibold">{Math.min(20, Math.max(1, maxSessionQuestions))} questions</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-slate-100 backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Microphone</p>
+          <p className="mt-1 text-sm font-semibold">{microphoneEnabled ? "Enabled" : "Disabled"}</p>
         </div>
       </div>
     </div>

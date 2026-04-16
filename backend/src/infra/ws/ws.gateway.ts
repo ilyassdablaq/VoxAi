@@ -41,14 +41,25 @@ export function registerWebSocketGateway(
     });
 
     try {
-      const authHeader = request.headers.authorization;
+      const token = (request as { cookies?: { accessToken?: string } }).cookies?.accessToken;
 
-      if (authHeader) {
-        await request.jwtVerify();
-        const user = request.user as { sub: string };
-        authenticatedUserId = user.sub;
-        isAuthenticated = true;
+      if (!token) {
+        typedSocket.send(
+          JSON.stringify({
+            type: "error",
+            error: {
+              message: "Authentication required",
+            },
+          }),
+        );
+        typedSocket.close(1008, "Authentication required");
+        return;
       }
+
+      request.user = (await request.server.jwt.verify(token)) as typeof request.user;
+      const user = request.user as { sub: string };
+      authenticatedUserId = user.sub;
+      isAuthenticated = true;
     } catch {
       typedSocket.send(
         JSON.stringify({
@@ -65,57 +76,45 @@ export function registerWebSocketGateway(
     socket.on("message", async (message: RawData) => {
       try {
         const payload = JSON.parse(String(message)) as {
-          type: "auth" | "audio_chunk" | "text_message";
+          type: "audio_chunk" | "text_message";
           data: string;
           language?: string;
-          token?: string;
         };
 
         if (!payload.type || !payload.data) {
           throw new AppError(400, "INVALID_WS_PAYLOAD", "Invalid WebSocket payload");
         }
 
-        if (!isAuthenticated) {
-          if (payload.type !== "auth" || !payload.token) {
-            throw new AppError(401, "UNAUTHORIZED", "Authentication required before sending chat messages");
-          }
+        if (!isAuthenticated || !authenticatedUserId) {
+          throw new AppError(401, "UNAUTHORIZED", "Authentication failed");
+        }
 
-          request.headers.authorization = `Bearer ${payload.token}`;
-          await request.jwtVerify();
+        const conversation = await conversationRepository.getConversationById(conversationId);
+        if (!conversation) {
+          typedSocket.send(
+            JSON.stringify({
+              type: "error",
+              error: {
+                message: "Conversation not found",
+              },
+            }),
+          );
+          typedSocket.close(1008, "Unauthorized");
+          return;
+        }
 
-          const user = request.user as { sub: string };
-          authenticatedUserId = user.sub;
-
-          const conversation = await conversationRepository.getConversationById(conversationId);
-          if (!conversation) {
-            typedSocket.send(
-              JSON.stringify({
-                type: "error",
-                error: {
-                  message: "Conversation not found",
-                },
-              }),
-            );
-            typedSocket.close(1008, "Unauthorized");
-            return;
-          }
-
-          try {
-            assertTenantAccess(conversation.userId, user.sub, "conversation");
-          } catch {
-            typedSocket.send(
-              JSON.stringify({
-                type: "error",
-                error: {
-                  message: "Unauthorized conversation access",
-                },
-              }),
-            );
-            typedSocket.close(1008, "Unauthorized");
-            return;
-          }
-
-          isAuthenticated = true;
+        try {
+          assertTenantAccess(conversation.userId, authenticatedUserId, "conversation");
+        } catch {
+          typedSocket.send(
+            JSON.stringify({
+              type: "error",
+              error: {
+                message: "Unauthorized conversation access",
+              },
+            }),
+          );
+          typedSocket.close(1008, "Unauthorized");
           return;
         }
 

@@ -175,6 +175,124 @@ npm run lint
 - Analytics and dashboard endpoints
 - Integration and developer portal modules
 
+## Authentication (Cookie-Based, HttpOnly)
+
+VoxFlow uses **HttpOnly, Secure cookies** for authentication. This architecture eliminates XSS vulnerabilities associated with localStorage/sessionStorage token storage and enforces a single, secure auth path.
+
+### How It Works
+
+1. **Login/Register** – Backend sets two HttpOnly cookies:
+   - `accessToken` – JWT valid for 15 minutes (configurable via `JWT_ACCESS_EXPIRES_IN`)
+   - `refreshToken` – JWT valid for 7 days (configurable via `JWT_REFRESH_EXPIRES_IN`)
+
+2. **API Requests** – All frontend requests must include `credentials: "include"` to send cookies:
+
+   ```typescript
+   fetch("/api/users/me", {
+     credentials: "include", // Browser sends HttpOnly cookies automatically
+   });
+   ```
+
+3. **Token Refresh** – When `accessToken` expires, frontend calls `/api/auth/refresh`:
+   ```typescript
+   // Cookie (refreshToken) is sent automatically; no bearer token needed
+   const newTokens = await fetch("/api/auth/refresh", {
+     method: "POST",
+     credentials: "include",
+   });
+   ```
+
+4. **WebSocket Auth** – Browser includes cookies in WebSocket upgrade requests; backend validates `accessToken` cookie at connection time.
+
+5. **Logout** – POST to `/api/auth/logout` clears both cookies.
+
+### Cookie Configuration
+
+Cookies are configured with security flags in `backend/src/modules/auth/auth.routes.ts`:
+
+```typescript
+const cookieOptions = {
+  httpOnly: true,              // JS cannot read/write (prevents XSS)
+  secure: NODE_ENV === "production", // HTTPS only in production
+  sameSite: NODE_ENV === "production" ? "none" : "lax", // CSRF protection
+  path: "/",
+};
+```
+
+- **Development** (`NODE_ENV=development`): `secure=false`, `sameSite=lax` (localhost allows http)
+- **Production** (`NODE_ENV=production`): `secure=true`, `sameSite=none` (HTTPS only, cross-site cookies)
+
+### Bearer Token Support
+
+⚠️ **Deprecated:** Bearer token authentication via `Authorization` header is **no longer supported**. All auth must use cookies. This prevents:
+- Token leakage in logs/analytics
+- Accidental exposure in URL query strings
+- Backward-compatibility fallbacks that weaken security
+
+### API Examples
+
+#### Register
+
+```bash
+curl -X POST http://localhost:4000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"Pass123!","fullName":"User"}'
+  # Response includes accessToken, refreshToken (also set as cookies)
+```
+
+#### Login
+
+```bash
+curl -X POST http://localhost:4000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"Pass123!"}'
+  # Cookies: accessToken, refreshToken
+```
+
+#### Authenticated Request
+
+```bash
+curl -X GET http://localhost:4000/api/users/me \
+  -b "accessToken=<jwt_token>; refreshToken=<refresh_jwt>"
+  # OR (in browser): fetch with credentials: "include"
+```
+
+#### Logout
+
+```bash
+curl -X POST http://localhost:4000/api/auth/logout \
+  -b "accessToken=<jwt_token>; refreshToken=<refresh_jwt>"
+  # Clears cookies; returns 204
+```
+
+### Backend Middleware
+
+Protected endpoints use the `authenticate` middleware:
+
+```typescript
+import { authenticate } from "@/common/middleware/auth-middleware";
+
+fastify.get("/api/protected", { preHandler: [authenticate] }, async (request) => {
+  // request.user is set; contains decoded JWT payload
+  const userId = request.user.sub;
+  return { userId };
+});
+```
+
+### Testing
+
+E2E auth flow tests are in `src/test/e2e-auth-flow.test.ts`. Run:
+
+```bash
+npm run test -- src/test/e2e-auth-flow.test.ts
+```
+
+Tests verify:
+- Registration, login, logout flows
+- Cookie-only auth (no bearer tokens)
+- WebSocket cookie authentication
+- Rejection of Authorization headers
+
 ## Observability And Product Analytics
 
 - `Sentry` is integrated in backend and frontend.

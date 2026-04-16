@@ -9,10 +9,6 @@ on:
     branches:
       - main
       - development
-  workflow_dispatch:
-  schedule:
-    - cron: "0 4 * * 1"
-    - cron: "0 3 * * 2"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -44,6 +40,9 @@ jobs:
 
       - name: Run tests
         run: npm run test
+
+      - name: Run SEO consistency check
+        run: npm run seo:check
 
       - name: Build frontend
         run: npm run build
@@ -84,14 +83,34 @@ jobs:
       - name: Build backend
         run: npm run build
 
-  security-gates:
-    name: Security Gates
+  security-static-analysis:
+    name: Security Static Analysis
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Run Semgrep security scan
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/src" \
+            returntocorp/semgrep:latest \
+            semgrep scan --config p/default --error --metrics=off /src
+
+  dependency-scan:
+    name: Dependency Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency review
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -105,39 +124,21 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Frontend WebSocket security tests
-        run: npx vitest run src/services/conversation.service.security.test.ts
-
-      - name: Frontend dependency audit (critical)
-        continue-on-error: true
-        run: npm audit --omit=dev --audit-level=critical
+      - name: Frontend dependency audit
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Install backend dependencies
+        working-directory: backend
         run: npm ci
-        working-directory: backend
 
-      - name: Generate Prisma client
-        run: npm run prisma:generate
+      - name: Backend dependency audit
         working-directory: backend
-
-      - name: Backend security test suite
-        run: >-
-          npx vitest run --config ./vitest.config.ts
-          src/common/services/tenant-guard.service.test.ts
-          src/modules/knowledge/knowledge.schemas.fuzz.test.ts
-          src/security/query-safety.guard.test.ts
-          src/services/rag/rag.service.test.ts
-        working-directory: backend
-
-      - name: Backend dependency audit (critical)
-        continue-on-error: true
-        run: npm audit --omit=dev --audit-level=critical
-        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
 
   deploy-development:
     name: Deploy Development
     runs-on: ubuntu-latest
-    needs: [frontend, backend, security-gates]
+    needs: [frontend, backend, security-static-analysis, dependency-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/development'
     environment:
       name: development
@@ -152,7 +153,7 @@ jobs:
   deploy-production:
     name: Deploy Production
     runs-on: ubuntu-latest
-    needs: [frontend, backend, security-gates]
+    needs: [frontend, backend, security-static-analysis, dependency-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: production
@@ -163,111 +164,3 @@ jobs:
 
       - name: Deploy to production
         run: echo "Deploy production environment here"
-
-  semgrep:
-    name: Semgrep Security Rules
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Run Semgrep
-        run: |
-          python -m pip install --upgrade pip
-          pip install semgrep
-          semgrep --config .semgrep/security.yml --error
-
-  frontend-dependency-audit:
-    name: Frontend npm audit
-    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Audit runtime dependencies
-        continue-on-error: true
-        run: npm audit --omit=dev --audit-level=critical
-
-  backend-dependency-audit:
-    name: Backend npm audit
-    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: backend
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Audit runtime dependencies
-        continue-on-error: true
-        run: npm audit --omit=dev --audit-level=critical
-
-  dependency-review:
-    name: Dependency Review (PR)
-    if: github.event_name == 'pull_request' && vars.ENABLE_DEPENDENCY_REVIEW == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Dependency review
-        uses: actions/dependency-review-action@v4
-
-  dast-zap-baseline:
-    name: OWASP ZAP Baseline Scan
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Validate target URL secret
-        id: target
-        run: |
-          if [ -z "${{ secrets.DAST_TARGET_URL }}" ]; then
-            echo "has_target=false" >> "$GITHUB_OUTPUT"
-            echo "DAST_TARGET_URL is not configured; skipping scan."
-          else
-            echo "has_target=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Run ZAP baseline
-        if: steps.target.outputs.has_target == 'true'
-        uses: zaproxy/action-baseline@v0.12.0
-        with:
-          target: ${{ secrets.DAST_TARGET_URL }}
-          fail_action: false
-          allow_issue_writing: false
-
-      - name: Skip notice
-        if: steps.target.outputs.has_target != 'true'
-        run: echo "Skipped ZAP scan because DAST_TARGET_URL is missing."

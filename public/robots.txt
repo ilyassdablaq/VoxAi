@@ -1,14 +1,21 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
 User-agent: *
 Allow: /
+
+# Private app areas
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /conversation/
+
+# Authentication and transactional routes
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /stripe-success
+Disallow: /stripe-cancel
+
+# API-like paths (if proxied at frontend host)
+Disallow: /api/
+
+Host: https://voxflow-ai-site.vercel.app
+Sitemap: https://voxflow-ai-site.vercel.app/sitemap.xml

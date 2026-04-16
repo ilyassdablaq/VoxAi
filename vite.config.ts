@@ -21,17 +21,34 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          "react-core": ["react", "react-dom", "react-router-dom"],
-          "react-query": ["@tanstack/react-query"],
-          "charts-motion": ["recharts", "framer-motion"],
-          "ui-vendor": [
-            "@radix-ui/react-dialog",
-            "@radix-ui/react-dropdown-menu",
-            "@radix-ui/react-navigation-menu",
-            "@radix-ui/react-tooltip",
-            "lucide-react",
-          ],
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            return undefined;
+          }
+
+          if (id.includes("react-router-dom") || id.includes("react-dom") || id.includes("/react/")) {
+            return "react-core";
+          }
+
+          if (id.includes("@tanstack/react-query")) {
+            return "react-query";
+          }
+
+          if (id.includes("recharts") || id.includes("framer-motion")) {
+            return "charts-motion";
+          }
+
+          if (
+            id.includes("@radix-ui/react-dialog") ||
+            id.includes("@radix-ui/react-dropdown-menu") ||
+            id.includes("@radix-ui/react-navigation-menu") ||
+            id.includes("@radix-ui/react-tooltip") ||
+            id.includes("lucide-react")
+          ) {
+            return "ui-vendor";
+          }
+
+          return undefined;
         },
       },
     },

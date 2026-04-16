@@ -10,6 +10,7 @@ export const integrationSettingsSchema = z.object({
   launcherIcon: z.enum(["chat", "message", "sparkles", "none"]).default("chat"),
   initialBotMessage: z.string().min(1).max(400).default("Hi. Send me a message and I will reply here."),
   maxSessionQuestions: z.number().int().min(1).max(20).default(3),
+  microphoneEnabled: z.boolean().default(false),
 });
 
 export const embedChatSchema = z.object({

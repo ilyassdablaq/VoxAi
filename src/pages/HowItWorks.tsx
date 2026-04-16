@@ -3,6 +3,7 @@ import { Mic, Cpu, MessageSquare, ArrowDown } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SectionHeading from "@/components/SectionHeading";
+import { Seo } from "@/components/Seo";
 
 const steps = [
   {
@@ -33,6 +34,11 @@ const fadeUp = {
 
 const HowItWorks = () => (
   <div className="min-h-screen bg-background">
+    <Seo
+      title="How It Works"
+      description="See how VoxAI turns voice input into real-time answers with a fast three-step pipeline for transcription, understanding, and response generation."
+      path="/how-it-works"
+    />
     <Navbar />
 
     <section className="pt-28 section-padding">
