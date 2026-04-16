@@ -114,38 +114,38 @@ describe("Admin routes access control", () => {
     await app.close();
   });
 
-  it("returns paginated audit logs for ADMIN", async () => {
+  it("returns override history for ADMIN", async () => {
     const app = Fastify();
     await app.register(cookie);
     await app.register(jwt, { secret: "test-secret-123456789" });
     await app.register(adminRoutes);
 
-    mockGetAuditLogs.mockResolvedValue({
-      items: [
-        {
-          id: "audit-1",
-          adminId: "admin-1",
-          targetUserId: "user-1",
-          action: "admin.subscription.override.set",
-          reason: "QA",
-          timestamp: "2026-04-12T00:00:00.000Z",
+    mockGetOverrideHistory.mockResolvedValue([
+      {
+        plan: "PRO",
+        reason: "QA",
+        expiresAt: null,
+        createdAt: "2026-04-12T00:00:00.000Z",
+        revokedAt: null,
+        createdByAdmin: {
+          email: "admin@example.com",
+          fullName: "Admin User",
         },
-      ],
-      total: 1,
-    });
+      },
+    ]);
 
     const adminToken = app.jwt.sign({ sub: "admin-1", role: "ADMIN" });
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/admin/audit-logs?limit=5&offset=0",
+      url: "/api/admin/users/target-user/overrides?limit=5",
       headers: {
         cookie: `accessToken=${adminToken}`,
       },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(mockGetAuditLogs).toHaveBeenCalledWith(5, 0);
+    expect(mockGetOverrideHistory).toHaveBeenCalledWith("target-user", 5);
 
     await app.close();
   });

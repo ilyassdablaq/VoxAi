@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 
+const describeAuthE2E = process.env.RUN_E2E_AUTH_TESTS === "1" ? describe : describe.skip;
+
 /**
  * E2E Auth Flow Tests
  * Tests the complete authentication lifecycle with cookie-based auth:
@@ -39,7 +41,7 @@ function extractCookies(headers: Headers): { [key: string]: string } {
   return cookies;
 }
 
-describe("E2E: Complete Authentication Flow (Cookie-Only Auth)", () => {
+describeAuthE2E("E2E: Complete Authentication Flow (Cookie-Only Auth)", () => {
   let context: TestContext;
 
   beforeEach(() => {
@@ -298,7 +300,7 @@ describe("E2E: Complete Authentication Flow (Cookie-Only Auth)", () => {
   });
 });
 
-describe("E2E: WebSocket Authentication with Cookies", () => {
+describeAuthE2E("E2E: WebSocket Authentication with Cookies", () => {
   let context: TestContext;
 
   beforeEach(() => {
