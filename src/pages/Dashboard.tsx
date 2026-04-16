@@ -53,7 +53,7 @@ const Dashboard = () => {
 
   const { data: conversations = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["conversations"],
-    queryFn: () => conversationService.listConversations(),
+    queryFn: () => conversationService.listConversations(1, 100),
   });
 
   const createConversationMutation = useMutation({

@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { integrationService } from "@/services/integration.service";
 import { API_BASE } from "@/lib/api-config";
 import { ChatWidgetPreview } from "@/components/integrations/ChatWidgetPreview";
+import { ApiError } from "@/lib/api-client";
 
 const THEME_PRESETS = [
   { label: "Indigo", value: "#5A67D8" },
@@ -84,7 +85,7 @@ export default function Integrations() {
   const { toast } = useToast();
   const { subscription } = useAuth();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["integration-settings"],
     queryFn: () => integrationService.getSettings(),
   });
@@ -244,10 +245,48 @@ export default function Integrations() {
     toast({ title: "Copied", description: "Embed snippet copied to clipboard." });
   };
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <DashboardShell title="Integrations" description="Install your chatbot on any website using an embeddable widget.">
         <Card><CardContent className="py-8">Loading integration settings...</CardContent></Card>
+      </DashboardShell>
+    );
+  }
+
+  if (isError) {
+    const message =
+      error instanceof ApiError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "Unable to load integration settings.";
+
+    return (
+      <DashboardShell title="Integrations" description="Install your chatbot on any website using an embeddable widget.">
+        <Card>
+          <CardContent className="space-y-3 py-8">
+            <p className="text-sm text-muted-foreground">Unable to load integration settings.</p>
+            <p className="text-xs text-muted-foreground">{message}</p>
+            <Button variant="outline" onClick={() => void refetch()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </DashboardShell>
+    );
+  }
+
+  if (!data) {
+    return (
+      <DashboardShell title="Integrations" description="Install your chatbot on any website using an embeddable widget.">
+        <Card>
+          <CardContent className="space-y-3 py-8">
+            <p className="text-sm text-muted-foreground">No integration settings available yet.</p>
+            <Button variant="outline" onClick={() => void refetch()}>
+              Reload
+            </Button>
+          </CardContent>
+        </Card>
       </DashboardShell>
     );
   }

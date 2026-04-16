@@ -69,8 +69,12 @@ function buildWebSocketUrl(baseUrl: string, conversationId: string) {
 }
 
 export const conversationService = {
-  listConversations(): Promise<ConversationSummary[]> {
-    return apiClient.get<ConversationSummary[]>("/api/conversations");
+  listConversations(page = 1, limit = 100): Promise<ConversationSummary[]> {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+    return apiClient.get<ConversationSummary[]>(`/api/conversations?${params.toString()}`);
   },
 
   async createConversation(payload: { title: string; language?: string; initialMessage?: string }): Promise<ConversationSummary> {
