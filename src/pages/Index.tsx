@@ -128,9 +128,9 @@ export default function Index() {
       />
       <Navbar />
 
-      <section className="pt-28 pb-16 section-padding relative overflow-hidden">
-        <div className="absolute inset-x-0 top-10 mx-auto h-80 w-[46rem] rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-        <div className="max-w-7xl mx-auto relative">
+      <section className="min-h-screen flex items-center justify-center section-padding relative overflow-hidden">
+        <div className="absolute inset-0 mx-auto h-80 w-[46rem] rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+        <div className="max-w-7xl mx-auto relative w-full">
           <motion.div {...fadeUp} className="max-w-4xl mx-auto text-center">
             <span className="inline-block px-3 py-1 text-xs font-medium rounded-full bg-primary/10 text-primary border border-primary/20 mb-6">
               AI Chatbot as a Service for Businesses
@@ -153,8 +153,6 @@ export default function Index() {
               </Button>
             </div>
           </motion.div>
-
-
         </div>
       </section>
 
