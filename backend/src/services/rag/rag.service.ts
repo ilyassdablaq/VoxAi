@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { isIP } from "node:net";
 import { PDFParse } from "pdf-parse";
 import OpenAI from "openai";
 import { XMLParser } from "fast-xml-parser";
@@ -15,6 +16,12 @@ const CRAWL_TIMEOUT_MS = 12000;
 const RETRIEVAL_CACHE_TTL_MS = 45_000;
 const RETRIEVAL_CACHE_MAX_ITEMS = 1_000;
 const EMBEDDING_CONCURRENCY = 4;
+const PROMPT_INJECTION_PATTERNS = [
+  /ignore\s+(all|previous)\s+instructions/i,
+  /reveal\s+(the\s+)?system\s+prompt/i,
+  /leak\s+(the\s+)?(system\s+prompt|secrets?|tokens?)/i,
+  /bypass\s+(security|guardrails?)/i,
+];
 
 function isTlsCertificateError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -32,6 +39,51 @@ function isTlsCertificateError(error: unknown): boolean {
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function hasPromptInjectionContent(value: string): boolean {
+  return PROMPT_INJECTION_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function isPrivateIp(hostname: string): boolean {
+  const ipVersion = isIP(hostname);
+  if (ipVersion === 4) {
+    if (hostname.startsWith("10.")) {
+      return true;
+    }
+
+    if (hostname.startsWith("127.")) {
+      return true;
+    }
+
+    if (hostname.startsWith("192.168.")) {
+      return true;
+    }
+
+    const octets = hostname.split(".").map((part) => Number(part));
+    return octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31;
+  }
+
+  if (ipVersion === 6) {
+    const normalized = hostname.toLowerCase();
+    return normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe80:");
+  }
+
+  return false;
+}
+
+function isPrivateCrawlTarget(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+
+  if (["localhost", "0.0.0.0", "::1"].includes(hostname)) {
+    return true;
+  }
+
+  if (hostname.endsWith(".local") || hostname.endsWith(".localhost")) {
+    return true;
+  }
+
+  return isPrivateIp(hostname);
 }
 
 function chunkText(text: string, wordsPerChunk = CHUNK_WORDS, overlapWords = CHUNK_OVERLAP_WORDS): string[] {
@@ -259,6 +311,14 @@ export class RagService {
       throw new AppError(400, "EMPTY_DOCUMENT", "Structured input did not contain parsable text");
     }
 
+    if (hasPromptInjectionContent(structuredText)) {
+      throw new AppError(
+        400,
+        "UNTRUSTED_CONTENT_DETECTED",
+        "Structured input contains prompt-injection style instructions and was rejected.",
+      );
+    }
+
     const result = await this.ingestPlainText({
       userId: input.userId,
       title: input.title,
@@ -276,6 +336,10 @@ export class RagService {
     const rootUrl = new URL(input.url);
     if (!["http:", "https:"].includes(rootUrl.protocol)) {
       throw new AppError(400, "INVALID_URL_PROTOCOL", "Only HTTP/HTTPS URLs are supported");
+    }
+
+    if (isPrivateCrawlTarget(rootUrl)) {
+      throw new AppError(400, "INVALID_CRAWL_TARGET", "Private or local crawl targets are not allowed");
     }
 
     const visited = new Set<string>();
