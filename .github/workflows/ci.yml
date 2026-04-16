@@ -83,10 +83,62 @@ jobs:
       - name: Build backend
         run: npm run build
 
+  security-static-analysis:
+    name: Security Static Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep security scan
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/src" \
+            returntocorp/semgrep:latest \
+            semgrep scan --config p/default --error --metrics=off /src
+
+  dependency-scan:
+    name: Dependency Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency review
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Frontend dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Backend dependency audit
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+
   deploy-development:
     name: Deploy Development
     runs-on: ubuntu-latest
-    needs: [frontend, backend]
+    needs: [frontend, backend, security-static-analysis, dependency-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/development'
     environment:
       name: development
@@ -101,7 +153,7 @@ jobs:
   deploy-production:
     name: Deploy Production
     runs-on: ubuntu-latest
-    needs: [frontend, backend]
+    needs: [frontend, backend, security-static-analysis, dependency-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: production
