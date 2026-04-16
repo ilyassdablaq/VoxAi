@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import sensible from "@fastify/sensible";
 import jwt from "@fastify/jwt";
+import cookie from "@fastify/cookie";
 import websocket from "@fastify/websocket";
 import multipart from "@fastify/multipart";
 import rawBody from "fastify-raw-body";
@@ -46,6 +47,7 @@ export async function buildApp() {
   app.setErrorHandler(errorHandler);
 
   await app.register(sensible);
+  await app.register(cookie);
   await app.register(websocket);
   await app.register(multipart, {
     limits: {
@@ -62,6 +64,11 @@ export async function buildApp() {
 
   await app.register(jwt, {
     secret: env.JWT_ACCESS_SECRET,
+  });
+
+  await app.register(jwt, {
+    namespace: "refreshJwt",
+    secret: env.JWT_REFRESH_SECRET,
   });
 
   await registerSecurityPlugins(app);

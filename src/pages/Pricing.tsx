@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SectionHeading from "@/components/SectionHeading";
+import { Seo } from "@/components/Seo";
 
 const checkoutMethods = [
   {
@@ -67,6 +68,11 @@ const fadeUp = {
 
 const Pricing = () => (
   <div className="min-h-screen bg-background">
+    <Seo
+      title="Pricing"
+      description="Compare VoxAI pricing plans and choose the right package for your team, from Free to Pro and Enterprise."
+      path="/pricing"
+    />
     <Navbar />
 
     <section className="pt-28 section-padding">

@@ -1,10 +1,17 @@
 import { useNavigate } from 'react-router-dom';
+import { Seo } from '@/components/Seo';
 
 export function StripeCancel() {
   const navigate = useNavigate();
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <Seo
+        title="Checkout Canceled"
+        description="Stripe checkout was canceled or payment was not confirmed. Your current VoxAI plan remains unchanged."
+        path="/stripe-cancel"
+        noindex
+      />
       <div className="text-center">
         <div className="mb-4">
           <svg className="w-16 h-16 text-red-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">

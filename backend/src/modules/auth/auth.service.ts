@@ -15,6 +15,14 @@ export class AuthService {
     private readonly repository: AuthRepository,
   ) {}
 
+  private get refreshJwt() {
+    return (this.fastify as any).refreshJwt as {
+      sign: (payload: Record<string, unknown>, options?: Record<string, unknown>) => string;
+      verify: (token: string) => Promise<Record<string, unknown>>;
+      decode: (token: string) => { exp?: number } | null;
+    };
+  }
+
   async register(payload: RegisterInput) {
     const existingUser = await this.repository.findUserByEmail(payload.email);
     if (existingUser) {
@@ -72,17 +80,34 @@ export class AuthService {
       throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or expired");
     }
 
-    const decoded = this.fastify.jwt.decode(payload.refreshToken) as { sub: string; email: string; role: "USER" | "ADMIN" } | null;
-    if (!decoded?.sub || !decoded?.email || !decoded?.role) {
+    let verifiedPayload: { sub?: string; email?: string; role?: "USER" | "ADMIN"; type?: string } | null;
+    try {
+      verifiedPayload = (await this.refreshJwt.verify(payload.refreshToken)) as {
+        sub?: string;
+        email?: string;
+        role?: "USER" | "ADMIN";
+        type?: string;
+      } | null;
+    } catch {
+      throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or expired");
+    }
+
+    if (
+      !verifiedPayload ||
+      !verifiedPayload.sub ||
+      !verifiedPayload.email ||
+      !verifiedPayload.role ||
+      verifiedPayload.type !== "refresh"
+    ) {
       throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token payload is invalid");
     }
 
     await this.repository.revokeRefreshToken(refreshTokenHash);
 
     return this.issueTokens({
-      id: decoded.sub,
-      email: decoded.email,
-      role: decoded.role,
+      id: verifiedPayload.sub,
+      email: verifiedPayload.email,
+      role: verifiedPayload.role,
     });
   }
 
@@ -95,7 +120,7 @@ export class AuthService {
       },
     );
 
-    const refreshToken = this.fastify.jwt.sign(
+    const refreshToken = this.refreshJwt.sign(
       { email: user.email, role: user.role, type: "refresh", jti: randomUUID() },
       {
         sub: user.id,
@@ -104,7 +129,11 @@ export class AuthService {
     );
 
     const refreshTokenHash = this.hashToken(refreshToken);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const decodedRefresh = this.refreshJwt.decode(refreshToken);
+    if (!decodedRefresh?.exp) {
+      throw new AppError(500, "TOKEN_ISSUE_FAILED", "Failed to determine refresh token expiry");
+    }
+    const expiresAt = new Date(decodedRefresh.exp * 1000);
 
     await this.repository.createRefreshToken({
       tokenHash: refreshTokenHash,

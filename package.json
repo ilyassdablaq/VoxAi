@@ -6,6 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "generate:sitemap": "node ./scripts/generate-sitemap.mjs",
+    "seo:check": "node ./scripts/seo-check.mjs",
+    "prebuild": "npm run generate:sitemap",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
@@ -45,6 +48,7 @@
     "@sentry/browser": "^10.47.0",
     "@sentry/react": "^10.47.0",
     "@tanstack/react-query": "^5.83.0",
+    "@vercel/analytics": "^1.5.0",
     "@vitejs/plugin-react-swc": "3.7.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

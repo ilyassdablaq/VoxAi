@@ -1,6 +1,5 @@
 import { apiClient } from "@/lib/api-client";
 import { API_BASE, API_BASE_CANDIDATES } from "@/lib/api-config";
-import { authService } from "@/services/auth.service";
 
 export interface KnowledgeDocumentItem {
   id: string;
@@ -36,11 +35,7 @@ export const knowledgeService = {
       new Promise<IngestionResult>((resolve, reject) => {
         const request = new XMLHttpRequest();
         request.open("POST", `${baseUrl}/api/knowledge/ingest/file`);
-
-        const accessToken = authService.getAccessToken();
-        if (accessToken) {
-          request.setRequestHeader("Authorization", `Bearer ${accessToken}`);
-        }
+        request.withCredentials = true;
 
         request.upload.onprogress = (event) => {
           if (!event.lengthComputable || !onProgress) {

@@ -1,6 +1,5 @@
 import { apiClient } from "@/lib/api-client";
 import { API_BASE, API_BASE_CANDIDATES } from "@/lib/api-config";
-import { authService } from "@/services/auth.service";
 import { trackEvent } from "@/lib/product-analytics";
 
 export interface ConversationMessage {
@@ -61,10 +60,12 @@ export type ConversationSocketEvent = AssistantResponseEvent | AssistantDeltaEve
 const WS_BASE_CANDIDATES = Array.from(new Set([API_BASE, ...API_BASE_CANDIDATES]));
 let wsBaseIndex = 0;
 
-function buildWebSocketUrl(baseUrl: string, conversationId: string, token: string) {
+function buildWebSocketUrl(baseUrl: string, conversationId: string) {
   const parsed = new URL(baseUrl);
   const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${parsed.host}/ws/conversations/${conversationId}?token=${encodeURIComponent(token)}`;
+  return {
+    url: `${protocol}//${parsed.host}/ws/conversations/${conversationId}`,
+  };
 }
 
 export const conversationService = {
@@ -100,14 +101,11 @@ export const conversationService = {
   },
 
   createSocket(conversationId: string): WebSocket {
-    const accessToken = authService.getAccessToken();
-    if (!accessToken) {
-      throw new Error("You must be signed in to open this conversation.");
-    }
-
     const selectedBase = WS_BASE_CANDIDATES[wsBaseIndex % WS_BASE_CANDIDATES.length];
     wsBaseIndex += 1;
+    const { url } = buildWebSocketUrl(selectedBase, conversationId);
+    const socket = new WebSocket(url);
 
-    return new WebSocket(buildWebSocketUrl(selectedBase, conversationId, accessToken));
+    return socket;
   },
 };

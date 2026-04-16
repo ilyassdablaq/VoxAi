@@ -8,6 +8,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { Seo } from "@/components/Seo";
 
 const SignIn = () => {
   const navigate = useNavigate();
@@ -82,6 +83,12 @@ const SignIn = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <Seo
+        title="Sign In"
+        description="Sign in to your VoxAI account to manage chatbot settings, conversations, analytics, and integrations."
+        path="/sign-in"
+        noindex
+      />
       <Navbar />
       <div className="flex-1 flex items-center justify-center py-12 section-padding">
         <motion.div

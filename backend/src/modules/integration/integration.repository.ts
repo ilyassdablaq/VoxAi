@@ -5,8 +5,14 @@ type IntegrationSettingsRecord = {
   userId: string;
   botName: string;
   themeColor: string;
+  themeMode: "light" | "dark";
   position: "bottom-right" | "bottom-left";
   language: string;
+  launcherText: string;
+  launcherIcon: "chat" | "message" | "sparkles" | "none";
+  initialBotMessage: string;
+  maxSessionQuestions: number;
+  microphoneEnabled: boolean;
   embedKey: string;
   updatedAt: Date;
 };
@@ -28,11 +34,47 @@ export class IntegrationRepository {
         user_id TEXT PRIMARY KEY,
         bot_name TEXT NOT NULL,
         theme_color TEXT NOT NULL,
+        theme_mode TEXT NOT NULL DEFAULT 'light',
         position TEXT NOT NULL,
         language TEXT NOT NULL,
+        launcher_text TEXT NOT NULL DEFAULT 'Chat',
+        launcher_icon TEXT NOT NULL DEFAULT 'chat',
+        initial_bot_message TEXT NOT NULL DEFAULT 'Hi. Send me a message and I will reply here.',
+        max_session_questions INTEGER NOT NULL DEFAULT 3,
+        microphone_enabled BOOLEAN NOT NULL DEFAULT FALSE,
         embed_key TEXT UNIQUE NOT NULL,
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE integration_settings
+      ADD COLUMN IF NOT EXISTS launcher_text TEXT NOT NULL DEFAULT 'Chat'
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE integration_settings
+      ADD COLUMN IF NOT EXISTS launcher_icon TEXT NOT NULL DEFAULT 'chat'
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE integration_settings
+      ADD COLUMN IF NOT EXISTS theme_mode TEXT NOT NULL DEFAULT 'light'
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE integration_settings
+      ADD COLUMN IF NOT EXISTS initial_bot_message TEXT NOT NULL DEFAULT 'Hi. Send me a message and I will reply here.'
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE integration_settings
+      ADD COLUMN IF NOT EXISTS max_session_questions INTEGER NOT NULL DEFAULT 3
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE integration_settings
+      ADD COLUMN IF NOT EXISTS microphone_enabled BOOLEAN NOT NULL DEFAULT FALSE
     `);
 
     this.initialized = true;
@@ -42,8 +84,14 @@ export class IntegrationRepository {
     user_id: string;
     bot_name: string;
     theme_color: string;
+    theme_mode: "light" | "dark";
     position: "bottom-right" | "bottom-left";
     language: string;
+    launcher_text: string | null;
+    launcher_icon: "chat" | "message" | "sparkles" | "none" | null;
+    initial_bot_message: string | null;
+    max_session_questions: number | null;
+    microphone_enabled: boolean | null;
     embed_key: string;
     updated_at: Date;
   }): IntegrationSettingsRecord {
@@ -51,8 +99,14 @@ export class IntegrationRepository {
       userId: row.user_id,
       botName: row.bot_name,
       themeColor: row.theme_color,
+      themeMode: row.theme_mode ?? "light",
       position: row.position,
       language: row.language,
+      launcherText: row.launcher_text ?? "Chat",
+      launcherIcon: row.launcher_icon ?? "chat",
+      initialBotMessage: row.initial_bot_message ?? "Hi. Send me a message and I will reply here.",
+      maxSessionQuestions: row.max_session_questions ?? 3,
+      microphoneEnabled: row.microphone_enabled ?? false,
       embedKey: row.embed_key,
       updatedAt: row.updated_at,
     };
@@ -66,14 +120,20 @@ export class IntegrationRepository {
         user_id: string;
         bot_name: string;
         theme_color: string;
+        theme_mode: "light" | "dark";
         position: "bottom-right" | "bottom-left";
         language: string;
+        launcher_text: string | null;
+        launcher_icon: "chat" | "message" | "sparkles" | "none" | null;
+        initial_bot_message: string | null;
+        max_session_questions: number | null;
+        microphone_enabled: boolean | null;
         embed_key: string;
         updated_at: Date;
       }>
     >(
       `
-        SELECT user_id, bot_name, theme_color, position, language, embed_key, updated_at
+        SELECT user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, embed_key, updated_at
         FROM integration_settings
         WHERE user_id = $1
       `,
@@ -87,51 +147,107 @@ export class IntegrationRepository {
     const embedKey = createEmbedKey();
     await prisma.$executeRawUnsafe(
       `
-        INSERT INTO integration_settings (user_id, bot_name, theme_color, position, language, embed_key, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        INSERT INTO integration_settings (user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, embed_key, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
       `,
       userId,
-      "Assistant",
+      "Chatbot",
       "#5A67D8",
+      "light",
       "bottom-right",
       "en",
+      "Chat",
+      "chat",
+      "Hi. Send me a message and I will reply here.",
+      3,
+      false,
       embedKey,
     );
 
     return {
       userId,
-      botName: "Assistant",
+      botName: "Chatbot",
       themeColor: "#5A67D8",
+      themeMode: "light",
       position: "bottom-right",
       language: "en",
+      launcherText: "Chat",
+      launcherIcon: "chat",
+      initialBotMessage: "Hi. Send me a message and I will reply here.",
+      maxSessionQuestions: 3,
+      microphoneEnabled: false,
       embedKey,
       updatedAt: new Date(),
     } as IntegrationSettingsRecord;
   }
 
-  async updateSettings(userId: string, payload: { botName: string; themeColor: string; position: "bottom-right" | "bottom-left"; language: string }) {
+  async updateSettings(userId: string, payload: {
+    botName: string;
+    themeColor: string;
+    themeMode: "light" | "dark";
+    position: "bottom-right" | "bottom-left";
+    language: string;
+    launcherText: string;
+    launcherIcon: "chat" | "message" | "sparkles" | "none";
+    initialBotMessage: string;
+    maxSessionQuestions: number;
+    microphoneEnabled: boolean;
+  }) {
     await this.ensureTable();
 
     await this.getOrCreateByUserId(userId);
 
-    await prisma.$executeRawUnsafe(
+    const updatedRows = await prisma.$queryRawUnsafe<
+      Array<{
+        user_id: string;
+        bot_name: string;
+        theme_color: string;
+        theme_mode: "light" | "dark";
+        position: "bottom-right" | "bottom-left";
+        language: string;
+        launcher_text: string | null;
+        launcher_icon: "chat" | "message" | "sparkles" | "none" | null;
+        initial_bot_message: string | null;
+        max_session_questions: number | null;
+        microphone_enabled: boolean | null;
+        embed_key: string;
+        updated_at: Date;
+      }>
+    >(
       `
         UPDATE integration_settings
         SET bot_name = $2,
             theme_color = $3,
-            position = $4,
-            language = $5,
+            theme_mode = $4,
+            position = $5,
+            language = $6,
+            launcher_text = $7,
+            launcher_icon = $8,
+            initial_bot_message = $9,
+            max_session_questions = $10,
+            microphone_enabled = $11,
             updated_at = NOW()
         WHERE user_id = $1
+          RETURNING user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, embed_key, updated_at
       `,
       userId,
       payload.botName,
       payload.themeColor,
+      payload.themeMode,
       payload.position,
       payload.language,
+      payload.launcherText,
+      payload.launcherIcon,
+      payload.initialBotMessage,
+      payload.maxSessionQuestions,
+      payload.microphoneEnabled,
     );
 
-    return this.getOrCreateByUserId(userId);
+    if (updatedRows.length === 0) {
+      return this.getOrCreateByUserId(userId);
+    }
+
+    return this.mapRecord(updatedRows[0]);
   }
 
   async regenerateEmbedKey(userId: string) {
@@ -162,14 +278,20 @@ export class IntegrationRepository {
         user_id: string;
         bot_name: string;
         theme_color: string;
+        theme_mode: "light" | "dark";
         position: "bottom-right" | "bottom-left";
         language: string;
+        launcher_text: string | null;
+        launcher_icon: "chat" | "message" | "sparkles" | "none" | null;
+        initial_bot_message: string | null;
+        max_session_questions: number | null;
+        microphone_enabled: boolean | null;
         embed_key: string;
         updated_at: Date;
       }>
     >(
       `
-        SELECT user_id, bot_name, theme_color, position, language, embed_key, updated_at
+        SELECT user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, embed_key, updated_at
         FROM integration_settings
         WHERE embed_key = $1
       `,

@@ -1,9 +1,6 @@
 import { API_BASE, API_BASE_CANDIDATES } from "@/lib/api-config";
 import { trackEvent } from "@/lib/product-analytics";
 
-const ACCESS_TOKEN_KEY = "accessToken";
-const REFRESH_TOKEN_KEY = "refreshToken";
-
 export interface User {
   id: string;
   email: string;
@@ -65,7 +62,10 @@ async function performAuthFetch(path: string, init: RequestInit): Promise<Respon
 
   for (const baseUrl of baseCandidates) {
     try {
-      return await fetch(`${baseUrl}${path}`, init);
+      return await fetch(`${baseUrl}${path}`, {
+        credentials: "include",
+        ...init,
+      });
     } catch (error) {
       lastError = error;
     }
@@ -130,34 +130,24 @@ export const authService = {
   },
 
   async refreshTokens(): Promise<{ accessToken: string; refreshToken: string }> {
-    const refreshToken = this.getRefreshToken();
-    if (!refreshToken) {
-      throw new Error("Missing refresh token");
-    }
-
     const response = await performAuthFetch(`/api/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
     });
 
     if (!response.ok) throw await parseAuthError(response, "Token refresh failed");
 
-    const tokens = (await response.json()) as { accessToken: string; refreshToken: string };
-    this.setTokens(tokens.accessToken, tokens.refreshToken);
-    return tokens;
+    return (await response.json()) as { accessToken: string; refreshToken: string };
+  },
+
+  async logout(): Promise<void> {
+    await performAuthFetch(`/api/auth/logout`, {
+      method: "POST",
+    });
   },
 
   async getCurrentUser(): Promise<UserProfile> {
-    const token = this.getAccessToken();
-    if (!token) {
-      throw new Error("Missing access token");
-    }
-
     const response = await performAuthFetch(`/api/users/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
     });
 
     if (!response.ok) {
@@ -167,55 +157,21 @@ export const authService = {
     return response.json() as Promise<UserProfile>;
   },
 
-  setTokens(accessToken: string, refreshToken: string, persist = true): void {
-    if (persist) {
-      localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-      sessionStorage.removeItem(ACCESS_TOKEN_KEY);
-      sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-      return;
-    }
-
-    sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-    sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-  },
+  setTokens(_accessToken: string, _refreshToken: string, _persist = true): void {},
 
   getAccessToken(): string | null {
-    return localStorage.getItem(ACCESS_TOKEN_KEY) ?? sessionStorage.getItem(ACCESS_TOKEN_KEY);
+    return null;
   },
 
   getRefreshToken(): string | null {
-    return localStorage.getItem(REFRESH_TOKEN_KEY) ?? sessionStorage.getItem(REFRESH_TOKEN_KEY);
+    return null;
   },
 
   clearTokens(): void {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
-    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
   },
 
   isLoggedIn(): boolean {
-    const accessToken = this.getAccessToken();
-    if (!accessToken) {
-      return false;
-    }
-
-    const payload = decodeAccessToken(accessToken);
-    if (!payload?.exp) {
-      this.clearTokens();
-      return false;
-    }
-
-    const nowInSeconds = Math.floor(Date.now() / 1000);
-    if (payload.exp <= nowInSeconds) {
-      this.clearTokens();
-      return false;
-    }
-
-    return true;
+    return false;
   },
 
   decodeToken(token: string): JwtPayload | null {

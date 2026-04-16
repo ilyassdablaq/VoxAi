@@ -9,6 +9,7 @@ import { ApiError, apiClient } from "@/lib/api-client";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SectionHeading from "@/components/SectionHeading";
+import { Seo } from "@/components/Seo";
 
 const fadeUp = {
   initial: { opacity: 0, y: 30 },
@@ -54,6 +55,11 @@ const Contact = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Seo
+        title="Contact"
+        description="Contact VoxAI for product questions, demos, and business partnerships around AI voice chatbots and automation."
+        path="/contact"
+      />
       <Navbar />
 
       <section className="pt-28 section-padding">

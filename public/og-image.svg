@@ -1,0 +1,19 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" rx="48" fill="#020617" />
+  <rect x="72" y="72" width="1056" height="486" rx="36" fill="url(#paint0_linear)" stroke="rgba(148,163,184,0.18)" />
+  <circle cx="930" cy="148" r="170" fill="#22c55e" fill-opacity="0.10" />
+  <circle cx="232" cy="492" r="150" fill="#38bdf8" fill-opacity="0.12" />
+  <path d="M177 199C177 174.147 197.147 154 222 154H490C514.853 154 535 174.147 535 199V341C535 365.853 514.853 386 490 386H346.5L284.5 439V386H222C197.147 386 177 365.853 177 341V199Z" fill="rgba(15,23,42,0.78)" stroke="rgba(255,255,255,0.1)" />
+  <path d="M246 235C246 223.954 254.954 215 266 215H443C454.046 215 463 223.954 463 235C463 246.046 454.046 255 443 255H266C254.954 255 246 246.046 246 235Z" fill="#22c55e" />
+  <path d="M246 291C246 279.954 254.954 271 266 271H397C408.046 271 417 279.954 417 291C417 302.046 408.046 311 397 311H266C254.954 311 246 302.046 246 291Z" fill="#e2e8f0" fill-opacity="0.9" />
+  <path d="M617 187H831C851.435 187 868 203.565 868 224V243C868 263.435 851.435 280 831 280H748L704 320V280H617C596.565 280 580 263.435 580 243V224C580 203.565 596.565 187 617 187Z" fill="#0f172a" stroke="rgba(255,255,255,0.08)" />
+  <path d="M650 353H898C916.225 353 931 367.775 931 386V405C931 423.225 916.225 438 898 438H804L762 472V438H650C631.775 438 617 423.225 617 405V386C617 367.775 631.775 353 650 353Z" fill="#111827" stroke="rgba(255,255,255,0.08)" />
+  <text x="178" y="490" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="74" font-weight="700" letter-spacing="-1.5">VoxAI</text>
+  <text x="178" y="542" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="500">AI voice chatbots for support, sales, and automation</text>
+  <defs>
+    <linearGradient id="paint0_linear" x1="72" y1="72" x2="1128" y2="558" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0f172a" />
+      <stop offset="1" stop-color="#111827" />
+    </linearGradient>
+  </defs>
+</svg>

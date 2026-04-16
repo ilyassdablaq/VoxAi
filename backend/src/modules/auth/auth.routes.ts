@@ -1,9 +1,46 @@
-import { FastifyInstance } from "fastify";
+import { FastifyInstance, FastifyReply } from "fastify";
 import { validate } from "../../common/middleware/validate.js";
 import { AuthRepository } from "./auth.repository.js";
 import { AuthService } from "./auth.service.js";
 import { LoginInput, RefreshInput, RegisterInput, ForgotPasswordInput, ResetPasswordInput, loginSchema, refreshSchema, registerSchema, forgotPasswordSchema, resetPasswordSchema } from "./auth.schemas.js";
 import { auditLogService } from "../../common/services/audit-log.service.js";
+import { AppError } from "../../common/errors/app-error.js";
+
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? ("none" as const) : ("lax" as const),
+  path: "/",
+};
+
+function applyAuthCookies(
+  fastify: FastifyInstance,
+  reply: FastifyReply,
+  accessToken: string,
+  refreshToken: string,
+): void {
+  const typedFastify = fastify as FastifyInstance & { refreshJwt: { decode: (token: string) => { exp?: number } | null } };
+  const accessDecoded = typedFastify.jwt.decode(accessToken) as { exp?: number } | null;
+  const refreshDecoded = typedFastify.refreshJwt.decode(refreshToken);
+
+  if (!accessDecoded?.exp || !refreshDecoded?.exp) {
+    throw new AppError(500, "TOKEN_ISSUE_FAILED", "Failed to determine auth cookie expiry");
+  }
+
+  reply.setCookie("accessToken", accessToken, {
+    ...cookieOptions,
+    expires: new Date(accessDecoded.exp * 1000),
+  });
+  reply.setCookie("refreshToken", refreshToken, {
+    ...cookieOptions,
+    expires: new Date(refreshDecoded.exp * 1000),
+  });
+}
+
+function clearAuthCookies(reply: { clearCookie: (name: string, options: { path: string }) => unknown }): void {
+  reply.clearCookie("accessToken", { path: "/" });
+  reply.clearCookie("refreshToken", { path: "/" });
+}
 
 
 export async function authRoutes(fastify: FastifyInstance): Promise<void> {
@@ -12,6 +49,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post("/api/auth/register", { preHandler: [validate({ body: registerSchema })] }, async (request, reply) => {
     try {
       const result = await authService.register(request.body as RegisterInput);
+      applyAuthCookies(fastify, reply, result.accessToken, result.refreshToken);
       
       // Audit log
       await auditLogService.log({
@@ -42,9 +80,10 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     }
   });
 
-  fastify.post("/api/auth/login", { preHandler: [validate({ body: loginSchema })] }, async (request) => {
+  fastify.post("/api/auth/login", { preHandler: [validate({ body: loginSchema })] }, async (request, reply) => {
     try {
       const result = await authService.login(request.body as LoginInput);
+      applyAuthCookies(fastify, reply, result.accessToken, result.refreshToken);
       
       // Audit log
       await auditLogService.log({
@@ -75,8 +114,22 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     }
   });
 
-  fastify.post("/api/auth/refresh", { preHandler: [validate({ body: refreshSchema })] }, async (request) => {
-    return authService.refresh(request.body as RefreshInput);
+  fastify.post("/api/auth/refresh", async (request, reply) => {
+    const body = request.body as RefreshInput | undefined;
+    const refreshToken = request.cookies?.refreshToken ?? body?.refreshToken;
+
+    if (!refreshToken) {
+      throw new AppError(401, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or expired");
+    }
+
+    const result = await authService.refresh({ refreshToken });
+    applyAuthCookies(fastify, reply, result.accessToken, result.refreshToken);
+    return result;
+  });
+
+  fastify.post("/api/auth/logout", async (_request, reply) => {
+    clearAuthCookies(reply);
+    return reply.status(204).send();
   });
 
   fastify.post("/api/auth/forgot-password", { preHandler: [validate({ body: forgotPasswordSchema })] }, async (request, reply) => {

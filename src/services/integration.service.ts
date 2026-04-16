@@ -4,8 +4,14 @@ export interface IntegrationSettings {
   userId: string;
   botName: string;
   themeColor: string;
+  themeMode: "light" | "dark";
   position: "bottom-right" | "bottom-left";
   language: string;
+  launcherText: string;
+  launcherIcon: "chat" | "message" | "sparkles" | "none";
+  initialBotMessage: string;
+  maxSessionQuestions: number;
+  microphoneEnabled: boolean;
   embedKey: string;
   updatedAt: string;
 }
@@ -15,7 +21,18 @@ export const integrationService = {
     return apiClient.get<IntegrationSettings>("/api/integrations/settings");
   },
 
-  updateSettings(payload: { botName: string; themeColor: string; position: "bottom-right" | "bottom-left"; language: string }) {
+  updateSettings(payload: {
+    botName: string;
+    themeColor: string;
+    themeMode: "light" | "dark";
+    position: "bottom-right" | "bottom-left";
+    language: string;
+    launcherText: string;
+    launcherIcon: "chat" | "message" | "sparkles" | "none";
+    initialBotMessage: string;
+    maxSessionQuestions: number;
+    microphoneEnabled: boolean;
+  }) {
     return apiClient.put<IntegrationSettings>("/api/integrations/settings", payload);
   },
 

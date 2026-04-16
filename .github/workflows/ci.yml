@@ -41,6 +41,9 @@ jobs:
       - name: Run tests
         run: npm run test
 
+      - name: Run SEO consistency check
+        run: npm run seo:check
+
       - name: Build frontend
         run: npm run build
 
