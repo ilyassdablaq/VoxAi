@@ -22,6 +22,12 @@ interface JwtPayload {
   exp?: number;
 }
 
+const ACCESS_TOKEN_STORAGE_KEY = "auth.accessToken";
+const REFRESH_TOKEN_STORAGE_KEY = "auth.refreshToken";
+
+let accessTokenCache: string | null = null;
+let refreshTokenCache: string | null = null;
+
 export interface UserProfile {
   id: string;
   firstName: string;
@@ -62,8 +68,14 @@ async function performAuthFetch(path: string, init: RequestInit): Promise<Respon
 
   for (const baseUrl of baseCandidates) {
     try {
+      const headers = new Headers(init.headers ?? undefined);
+      if (!headers.has("Authorization") && accessTokenCache) {
+        headers.set("Authorization", `Bearer ${accessTokenCache}`);
+      }
+
       return await fetch(`${baseUrl}${path}`, {
         credentials: "include",
+        headers,
         ...init,
       });
     } catch (error) {
@@ -94,6 +106,40 @@ function decodeAccessToken(token: string): JwtPayload | null {
   }
 }
 
+function setStoredValue(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // no-op in restricted storage environments
+  }
+}
+
+function getStoredValue(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function removeStoredValue(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // no-op in restricted storage environments
+  }
+}
+
+function ensureTokenCachesLoaded(): void {
+  if (accessTokenCache === null) {
+    accessTokenCache = getStoredValue(ACCESS_TOKEN_STORAGE_KEY);
+  }
+
+  if (refreshTokenCache === null) {
+    refreshTokenCache = getStoredValue(REFRESH_TOKEN_STORAGE_KEY);
+  }
+}
+
 export const authService = {
   async register(email: string, password: string, fullName: string): Promise<AuthResponse> {
     const response = await performAuthFetch(`/api/auth/register`, {
@@ -105,6 +151,7 @@ export const authService = {
     if (!response.ok) throw await parseAuthError(response, "Registration failed");
 
     const payload = (await response.json()) as AuthResponse;
+    authService.setTokens(payload.accessToken, payload.refreshToken, true);
     trackEvent("user_registered", {
       method: "password",
       role: payload.user.role,
@@ -122,6 +169,7 @@ export const authService = {
     if (!response.ok) throw await parseAuthError(response, "Login failed");
 
     const payload = (await response.json()) as AuthResponse;
+    authService.setTokens(payload.accessToken, payload.refreshToken, true);
     trackEvent("user_logged_in", {
       method: "password",
       role: payload.user.role,
@@ -137,13 +185,16 @@ export const authService = {
 
     if (!response.ok) throw await parseAuthError(response, "Token refresh failed");
 
-    return (await response.json()) as { accessToken: string; refreshToken: string };
+    const payload = (await response.json()) as { accessToken: string; refreshToken: string };
+    authService.setTokens(payload.accessToken, payload.refreshToken, true);
+    return payload;
   },
 
   async logout(): Promise<void> {
     await performAuthFetch(`/api/auth/logout`, {
       method: "POST",
     });
+    authService.clearTokens();
   },
 
   async getCurrentUser(): Promise<UserProfile> {
@@ -157,21 +208,49 @@ export const authService = {
     return response.json() as Promise<UserProfile>;
   },
 
-  setTokens(_accessToken: string, _refreshToken: string, _persist = true): void {},
+  setTokens(nextAccessToken: string, nextRefreshToken: string, persist = true): void {
+    accessTokenCache = nextAccessToken;
+    refreshTokenCache = nextRefreshToken;
+
+    if (!persist) {
+      removeStoredValue(ACCESS_TOKEN_STORAGE_KEY);
+      removeStoredValue(REFRESH_TOKEN_STORAGE_KEY);
+      return;
+    }
+
+    setStoredValue(ACCESS_TOKEN_STORAGE_KEY, nextAccessToken);
+    setStoredValue(REFRESH_TOKEN_STORAGE_KEY, nextRefreshToken);
+  },
 
   getAccessToken(): string | null {
-    return null;
+    ensureTokenCachesLoaded();
+    return accessTokenCache;
   },
 
   getRefreshToken(): string | null {
-    return null;
+    ensureTokenCachesLoaded();
+    return refreshTokenCache;
   },
 
   clearTokens(): void {
+    accessTokenCache = null;
+    refreshTokenCache = null;
+    removeStoredValue(ACCESS_TOKEN_STORAGE_KEY);
+    removeStoredValue(REFRESH_TOKEN_STORAGE_KEY);
   },
 
   isLoggedIn(): boolean {
-    return false;
+    const token = authService.getAccessToken();
+    if (!token) {
+      return false;
+    }
+
+    const payload = decodeAccessToken(token);
+    if (!payload?.exp) {
+      return false;
+    }
+
+    return payload.exp * 1000 > Date.now();
   },
 
   decodeToken(token: string): JwtPayload | null {

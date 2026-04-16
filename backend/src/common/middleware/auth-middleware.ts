@@ -3,7 +3,13 @@ import { AppError } from "../errors/app-error.js";
 
 export async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
   try {
-    const accessToken = (request as FastifyRequest & { cookies?: { accessToken?: string } }).cookies?.accessToken;
+    const cookieToken = (request as FastifyRequest & { cookies?: { accessToken?: string } }).cookies?.accessToken;
+    const authorizationHeader = request.headers.authorization;
+    const bearerToken =
+      typeof authorizationHeader === "string" && authorizationHeader.toLowerCase().startsWith("bearer ")
+        ? authorizationHeader.slice(7).trim()
+        : null;
+    const accessToken = cookieToken || bearerToken;
 
     if (!accessToken) {
       throw new AppError(401, "UNAUTHORIZED", "Invalid or missing authentication token");

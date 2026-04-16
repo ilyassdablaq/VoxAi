@@ -103,12 +103,16 @@ async function parseErrorResponse(response: Response): Promise<ApiError> {
 }
 
 async function performRequest(path: string, init: RequestInit, retryOnUnauthorized = true): Promise<Response> {
+  const accessToken = authService.getAccessToken();
+  const baseHeaders = new Headers(init.headers ?? undefined);
+  if (accessToken && !baseHeaders.has("Authorization")) {
+    baseHeaders.set("Authorization", `Bearer ${accessToken}`);
+  }
+
   const requestInit: RequestInit = {
     ...init,
     credentials: "include",
-    headers: {
-      ...(init.headers || {}),
-    },
+    headers: baseHeaders,
   };
 
   const baseCandidates = getBaseCandidatesInPriorityOrder();
