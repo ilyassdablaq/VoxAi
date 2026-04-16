@@ -3,7 +3,6 @@ import { PDFParse } from "pdf-parse";
 import OpenAI from "openai";
 import { XMLParser } from "fast-xml-parser";
 import * as cheerio from "cheerio";
-import { Agent } from "undici";
 import { AppError } from "../../common/errors/app-error.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
@@ -16,7 +15,6 @@ const CRAWL_TIMEOUT_MS = 12000;
 const RETRIEVAL_CACHE_TTL_MS = 45_000;
 const RETRIEVAL_CACHE_MAX_ITEMS = 1_000;
 const EMBEDDING_CONCURRENCY = 4;
-const insecureTlsAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
 function isTlsCertificateError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -298,7 +296,7 @@ export class RagService {
       const timeout = setTimeout(() => controller.abort(), CRAWL_TIMEOUT_MS);
 
       try {
-        const requestInit: RequestInit & { dispatcher?: Agent } = {
+        const requestInit: RequestInit = {
           headers: {
             "User-Agent": "Mozilla/5.0 (compatible; voxflow-bot/1.0; +https://voxflow.io/bot)",
             Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -312,11 +310,12 @@ export class RagService {
           response = await fetch(currentUrl, requestInit);
         } catch (fetchError) {
           if (isTlsCertificateError(fetchError)) {
-            logger.warn({ url: currentUrl }, "RAG crawl TLS certificate issue detected, retrying with relaxed TLS verification");
-            response = await fetch(currentUrl, {
-              ...requestInit,
-              dispatcher: insecureTlsAgent,
-            } as RequestInit);
+            logger.warn({ url: currentUrl }, "RAG crawl TLS certificate issue detected");
+            throw new AppError(
+              400,
+              "URL_TLS_CERT_INVALID",
+              "Could not crawl website due to invalid TLS certificate. Provide a URL with a valid certificate chain.",
+            );
           } else {
             throw fetchError;
           }
