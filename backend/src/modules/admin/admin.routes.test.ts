@@ -31,7 +31,7 @@ describe("Admin routes access control", () => {
   it("allows ADMIN to override subscription", async () => {
     const app = Fastify();
     await app.register(cookie);
-    await app.register(jwt, { secret: "test-secret-123456789" });
+    await app.register(jwt, { secret: "test" });
     await app.register(adminRoutes);
 
     mockSetSubscriptionOverride.mockResolvedValue({
@@ -67,7 +67,7 @@ describe("Admin routes access control", () => {
   it("returns 403 for non-admin users", async () => {
     const app = Fastify();
     await app.register(cookie);
-    await app.register(jwt, { secret: "test-secret-123456789" });
+    await app.register(jwt, { secret: "test" });
     await app.register(adminRoutes);
 
     const userToken = app.jwt.sign({ sub: "user-1", role: "USER" });
@@ -89,7 +89,7 @@ describe("Admin routes access control", () => {
   it("allows ADMIN to remove subscription override", async () => {
     const app = Fastify();
     await app.register(cookie);
-    await app.register(jwt, { secret: "test-secret-123456789" });
+    await app.register(jwt, { secret: "test" });
     await app.register(adminRoutes);
 
     mockRemoveSubscriptionOverride.mockResolvedValue(undefined);
@@ -117,7 +117,7 @@ describe("Admin routes access control", () => {
   it("returns override history for ADMIN", async () => {
     const app = Fastify();
     await app.register(cookie);
-    await app.register(jwt, { secret: "test-secret-123456789" });
+    await app.register(jwt, { secret: "test" });
     await app.register(adminRoutes);
 
     mockGetOverrideHistory.mockResolvedValue([

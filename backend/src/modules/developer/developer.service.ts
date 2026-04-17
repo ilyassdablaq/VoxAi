@@ -94,7 +94,7 @@ export class DeveloperService {
     const wsBaseUrl = `${env.APP_ORIGIN.replace(/^http/, "ws")}/ws/conversations/{conversationId}`;
 
     return {
-      restExample: `curl -X POST ${restBaseUrl}/embed/chat \\\n  -H "x-api-key: YOUR_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "embedKey": "YOUR_EMBED_KEY",\n    "message": "Hello from API"\n  }'`,
+      restExample: `curl -X POST ${restBaseUrl}/embed/chat \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "embedKey": "YOUR_EMBED_KEY",\n    "message": "Hello from API"\n  }'`,
       websocketExample: `const socket = new WebSocket("${wsBaseUrl}");\n\nsocket.addEventListener("open", () => {\n  socket.send(JSON.stringify({\n    type: "auth",\n    data: "authenticate",\n    token: "YOUR_JWT"\n  }));\n});`,
       javascriptExample: `const response = await fetch("${restBaseUrl}/embed/chat", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "x-api-key": process.env.VOX_API_KEY\n  },\n  body: JSON.stringify({\n    embedKey: "YOUR_EMBED_KEY",\n    message: "Can you help with billing?"\n  })\n});\n\nconst data = await response.json();\nconsole.log(data);`,
       pythonExample: `import os\nimport requests\n\nresp = requests.post(\n    "${restBaseUrl}/embed/chat",\n    headers={\n        "x-api-key": os.getenv("VOX_API_KEY"),\n        "Content-Type": "application/json"\n    },\n    json={\n        "embedKey": "YOUR_EMBED_KEY",\n        "message": "Hello from Python"\n    }\n)\n\nprint(resp.json())`,
