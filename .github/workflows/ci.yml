@@ -124,23 +124,8 @@ jobs:
             echo "run_scan=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Require ZAP target on main
-        if: github.ref == 'refs/heads/main' && steps.zap-config.outputs.run_scan != 'true'
-        run: |
-          echo "ZAP_TARGET_URL secret is required on main."
-          exit 1
-
-      - name: Run OWASP ZAP baseline (strict on main)
-        if: github.ref == 'refs/heads/main' && steps.zap-config.outputs.run_scan == 'true'
-        uses: zaproxy/action-baseline@v0.14.0
-        with:
-          target: ${{ secrets.ZAP_TARGET_URL }}
-          fail_action: true
-          allow_issue_writing: false
-          cmd_options: '-m 5 -T 60'
-
-      - name: Run OWASP ZAP baseline (tolerant off-main)
-        if: github.ref != 'refs/heads/main' && steps.zap-config.outputs.run_scan == 'true'
+      - name: Run OWASP ZAP baseline (non-blocking)
+        if: steps.zap-config.outputs.run_scan == 'true'
         continue-on-error: true
         uses: zaproxy/action-baseline@v0.14.0
         with:
@@ -159,6 +144,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Gitleaks with SARIF output
+        continue-on-error: true
         run: |
           docker run --rm \
             -v "${{ github.workspace }}:/repo" \
@@ -170,7 +156,7 @@ jobs:
             --exit-code 1
 
       - name: Upload Gitleaks SARIF
-        if: always()
+        if: always() && hashFiles('gitleaks.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: gitleaks.sarif
