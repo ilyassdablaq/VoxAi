@@ -14,6 +14,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   frontend:
     name: Frontend Test and Build
@@ -120,8 +124,23 @@ jobs:
             echo "run_scan=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run OWASP ZAP baseline
-        if: steps.zap-config.outputs.run_scan == 'true'
+      - name: Require ZAP target on main
+        if: github.ref == 'refs/heads/main' && steps.zap-config.outputs.run_scan != 'true'
+        run: |
+          echo "ZAP_TARGET_URL secret is required on main."
+          exit 1
+
+      - name: Run OWASP ZAP baseline (strict on main)
+        if: github.ref == 'refs/heads/main' && steps.zap-config.outputs.run_scan == 'true'
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ secrets.ZAP_TARGET_URL }}
+          fail_action: true
+          allow_issue_writing: false
+          cmd_options: '-m 5 -T 60'
+
+      - name: Run OWASP ZAP baseline (tolerant off-main)
+        if: github.ref != 'refs/heads/main' && steps.zap-config.outputs.run_scan == 'true'
         continue-on-error: true
         uses: zaproxy/action-baseline@v0.14.0
         with:
@@ -129,6 +148,32 @@ jobs:
           fail_action: false
           allow_issue_writing: false
           cmd_options: '-m 5 -T 60 -I'
+
+  secret-scan:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Gitleaks with SARIF output
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            zricethezav/gitleaks:latest detect \
+            --source /repo \
+            --redact \
+            --report-format sarif \
+            --report-path /repo/gitleaks.sarif \
+            --exit-code 1
+
+      - name: Upload Gitleaks SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gitleaks.sarif
 
   dependency-scan:
     name: Dependency Scan
@@ -156,6 +201,11 @@ jobs:
         run: npm ci
 
       - name: Frontend dependency audit
+        if: github.ref == 'refs/heads/main'
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Frontend dependency audit (tolerant off-main)
+        if: github.ref != 'refs/heads/main'
         continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
 
@@ -164,6 +214,12 @@ jobs:
         run: npm ci
 
       - name: Backend dependency audit
+        if: github.ref == 'refs/heads/main'
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Backend dependency audit (tolerant off-main)
+        if: github.ref != 'refs/heads/main'
         working-directory: backend
         continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
@@ -171,7 +227,7 @@ jobs:
   deploy-development:
     name: Deploy Development
     runs-on: ubuntu-latest
-    needs: [frontend, backend, security-static-analysis, dependency-scan, zap-dast]
+    needs: [frontend, backend, security-static-analysis, dependency-scan, zap-dast, secret-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/development'
     environment:
       name: development
@@ -186,7 +242,7 @@ jobs:
   deploy-production:
     name: Deploy Production
     runs-on: ubuntu-latest
-    needs: [frontend, backend, security-static-analysis, dependency-scan, zap-dast]
+    needs: [frontend, backend, security-static-analysis, dependency-scan, zap-dast, secret-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: production

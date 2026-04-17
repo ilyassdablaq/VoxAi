@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
     container_name: voxai-postgres
     restart: unless-stopped
     security_opt:
@@ -21,7 +21,7 @@ services:
       - /var/run/postgresql
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:7.4-alpine@sha256:efc27681bf81e6ed55cb581718b7818c6c04c39b1f9aa40854edd3ea2241b6ed
     container_name: voxai-redis
     restart: unless-stopped
     security_opt:
@@ -40,6 +40,11 @@ services:
       dockerfile: docker/Dockerfile
     container_name: voxai-backend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
     env_file:
       - ./backend/.env
     depends_on:
@@ -47,6 +52,8 @@ services:
       - redis
     ports:
       - "4000:4000"
+    tmpfs:
+      - /tmp
 
 volumes:
   postgres_data:
