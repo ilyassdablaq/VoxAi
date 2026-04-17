@@ -99,6 +99,36 @@ jobs:
             returntocorp/semgrep:latest \
             semgrep scan --config p/default --error --metrics=off /src
 
+  zap-dast:
+    name: ZAP DAST Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify ZAP target URL is configured
+        id: zap-config
+        env:
+          ZAP_TARGET_URL: ${{ secrets.ZAP_TARGET_URL }}
+        run: |
+          if [ -z "$ZAP_TARGET_URL" ]; then
+            echo "run_scan=false" >> "$GITHUB_OUTPUT"
+            echo "ZAP_TARGET_URL secret is not set. Skipping ZAP scan."
+          else
+            echo "run_scan=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run OWASP ZAP baseline
+        if: steps.zap-config.outputs.run_scan == 'true'
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ secrets.ZAP_TARGET_URL }}
+          fail_action: false
+          allow_issue_writing: false
+          cmd_options: '-m 5 -T 60'
+
   dependency-scan:
     name: Dependency Scan
     runs-on: ubuntu-latest
@@ -138,7 +168,7 @@ jobs:
   deploy-development:
     name: Deploy Development
     runs-on: ubuntu-latest
-    needs: [frontend, backend, security-static-analysis, dependency-scan]
+    needs: [frontend, backend, security-static-analysis, dependency-scan, zap-dast]
     if: github.event_name == 'push' && github.ref == 'refs/heads/development'
     environment:
       name: development
@@ -153,7 +183,7 @@ jobs:
   deploy-production:
     name: Deploy Production
     runs-on: ubuntu-latest
-    needs: [frontend, backend, security-static-analysis, dependency-scan]
+    needs: [frontend, backend, security-static-analysis, dependency-scan, zap-dast]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: production

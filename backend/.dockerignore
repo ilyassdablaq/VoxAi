@@ -1,6 +1,11 @@
 node_modules
 npm-debug.log
 dist
-.env
+.env*
+!.env.example
 .git
 .gitignore
+*.log
+coverage
+.npmrc
+.DS_Store
