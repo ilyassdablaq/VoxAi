@@ -95,7 +95,11 @@ export async function buildApp() {
     timestamp: new Date().toISOString(),
   }));
 
-  app.get("/health", async () => ({
+  app.get("/health", {
+    config: {
+      rateLimit: false,
+    },
+  }, async () => ({
     status: "ok",
     service: "voxai-backend",
     timestamp: new Date().toISOString(),

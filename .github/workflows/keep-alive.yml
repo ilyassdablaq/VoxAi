@@ -21,34 +21,15 @@ jobs:
             exit 0
           fi
 
-          BASE_URL="${BACKEND_URL%/}"
-          KEEP_ALIVE_URL="${BASE_URL}/keep-alive"
-          HEALTH_URL="${BASE_URL}/health"
-          ROOT_URL="${BASE_URL}/"
+          KEEP_ALIVE_URL="${BACKEND_URL%/}/keep-alive"
 
-          echo "Backend URL: ${BASE_URL}"
-          echo "Attempting to ping: ${KEEP_ALIVE_URL}"
-
-          # Try keep-alive endpoint
+          echo "Pinging: ${KEEP_ALIVE_URL}"
           if curl --fail --silent --show-error --max-time 15 "${KEEP_ALIVE_URL}"; then
-            echo "✓ Keep-alive ping successful"
+            echo "✓ Keep-alive endpoint pinged successfully (no Redis used)"
             exit 0
           fi
 
-          # If 404 or timeout, try health endpoint
-          echo "Keep-alive endpoint not available, falling back to /health"
-          if curl --fail --silent --show-error --max-time 15 "${HEALTH_URL}"; then
-            echo "✓ Health endpoint ping successful (fallback)"
-            exit 0
-          fi
-
-          # Last resort: try root
-          echo "Health endpoint failed, trying root endpoint"
-          if curl --fail --silent --show-error --max-time 15 "${ROOT_URL}"; then
-            echo "✓ Root endpoint ping successful (last resort)"
-            exit 0
-          fi
-
-          # Non-blocking warning
-          echo "::warning::All backend endpoints are currently unreachable. Backend may be deploying or temporarily offline. Not failing this workflow run."
+          # Non-blocking: if keep-alive fails, log as warning but don't fail workflow
+          # This ensures no fallback to /health (which uses Redis)
+          echo "::warning::Keep-alive endpoint unreachable, but not failing workflow. Backend may be deploying."
           exit 0
