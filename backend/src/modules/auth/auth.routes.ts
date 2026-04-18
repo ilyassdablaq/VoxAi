@@ -45,8 +45,9 @@ function clearAuthCookies(reply: { clearCookie: (name: string, options: { path: 
 
 export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   const authService = new AuthService(fastify, new AuthRepository());
+  const noRateLimit = { config: { rateLimit: false } };
 
-  fastify.post("/api/auth/register", { preHandler: [validate({ body: registerSchema })] }, async (request, reply) => {
+  fastify.post("/api/auth/register", { ...noRateLimit, preHandler: [validate({ body: registerSchema })] }, async (request, reply) => {
     try {
       const result = await authService.register(request.body as RegisterInput);
       applyAuthCookies(fastify, reply, result.accessToken, result.refreshToken);
@@ -80,7 +81,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     }
   });
 
-  fastify.post("/api/auth/login", { preHandler: [validate({ body: loginSchema })] }, async (request, reply) => {
+  fastify.post("/api/auth/login", { ...noRateLimit, preHandler: [validate({ body: loginSchema })] }, async (request, reply) => {
     try {
       const result = await authService.login(request.body as LoginInput);
       applyAuthCookies(fastify, reply, result.accessToken, result.refreshToken);
@@ -114,7 +115,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     }
   });
 
-  fastify.post("/api/auth/refresh", async (request, reply) => {
+  fastify.post("/api/auth/refresh", noRateLimit, async (request, reply) => {
     const body = request.body as RefreshInput | undefined;
     const refreshToken = request.cookies?.refreshToken ?? body?.refreshToken;
 
@@ -127,12 +128,12 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     return result;
   });
 
-  fastify.post("/api/auth/logout", async (_request, reply) => {
+  fastify.post("/api/auth/logout", noRateLimit, async (_request, reply) => {
     clearAuthCookies(reply);
     return reply.status(204).send();
   });
 
-  fastify.post("/api/auth/forgot-password", { preHandler: [validate({ body: forgotPasswordSchema })] }, async (request, reply) => {
+  fastify.post("/api/auth/forgot-password", { ...noRateLimit, preHandler: [validate({ body: forgotPasswordSchema })] }, async (request, reply) => {
     try {
       await authService.forgotPassword(request.body as ForgotPasswordInput);
       
@@ -162,7 +163,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     }
   });
 
-  fastify.post("/api/auth/reset-password", { preHandler: [validate({ body: resetPasswordSchema })] }, async (request, reply) => {
+  fastify.post("/api/auth/reset-password", { ...noRateLimit, preHandler: [validate({ body: resetPasswordSchema })] }, async (request, reply) => {
     try {
       await authService.resetPassword(request.body as ResetPasswordInput);
       
