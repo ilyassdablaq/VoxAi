@@ -100,12 +100,13 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
       return result;
     } catch (error) {
+      const requestBody = request.body as Partial<LoginInput> | undefined;
       await auditLogService.log({
         principalType: "system",
         principalId: "anonymous",
         action: "auth.login",
         resourceType: "user",
-        resourceId: (request.body as LoginInput).email,
+        resourceId: requestBody?.email ?? "unknown",
         status: "failure",
         errorMessage: error instanceof Error ? error.message : String(error),
         ipAddress: request.ip,
@@ -149,12 +150,13 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
       return reply.status(200).send({ message: "Reset email sent if account exists" });
     } catch (error) {
+      const requestBody = request.body as Partial<ForgotPasswordInput> | undefined;
       await auditLogService.log({
         principalType: "system",
         principalId: "anonymous",
         action: "auth.forgot_password",
         resourceType: "user",
-        resourceId: (request.body as ForgotPasswordInput).email,
+        resourceId: requestBody?.email ?? "unknown",
         status: "failure",
         errorMessage: error instanceof Error ? error.message : String(error),
         ipAddress: request.ip,
