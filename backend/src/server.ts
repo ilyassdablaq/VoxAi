@@ -21,7 +21,13 @@ async function bootstrap() {
 
   await connectDatabase();
   const app = await buildApp();
-  const workers = startWorkers();
+  const isUpstash = env.REDIS_URL.includes("upstash.io");
+  const shouldStartWorkers = env.QUEUE_WORKERS_ENABLED ?? !isUpstash;
+  const workers = shouldStartWorkers ? startWorkers() : [];
+
+  if (!shouldStartWorkers) {
+    logger.warn("Queue workers disabled for this process (set QUEUE_WORKERS_ENABLED=true to enable)");
+  }
 
   const closeGracefully = async () => {
     logger.info("Shutting down gracefully...");

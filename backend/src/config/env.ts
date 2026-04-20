@@ -75,6 +75,7 @@ const envSchema = z.object({
   RESET_PASSWORD_PATH: z.string().default("/reset-password"),
   CONTACT_RECEIVER_EMAIL: z.string().email().optional(),
   ADMIN_IP_ALLOWLIST: z.string().optional(),
+  QUEUE_WORKERS_ENABLED: z.coerce.boolean().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
