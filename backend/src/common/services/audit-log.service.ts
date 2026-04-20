@@ -47,6 +47,16 @@ function buildWhere(filters: AuditLogQueryFilters) {
   };
 }
 
+function isMissingAuditTableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = (error as { code?: string }).code;
+  const meta = (error as { meta?: { table?: string } }).meta;
+  return code === "P2021" && (meta?.table === "public.AuditLog" || meta?.table === "AuditLog");
+}
+
 class AuditLogService {
   async log(entry: AuditLogEntry): Promise<void> {
     try {
@@ -66,6 +76,11 @@ class AuditLogService {
         },
       });
     } catch (error) {
+      if (isMissingAuditTableError(error)) {
+        logger.warn("AuditLog table missing; skipping audit write");
+        return;
+      }
+
       logger.error({ error }, "Failed to write audit log");
     }
   }
@@ -73,18 +88,36 @@ class AuditLogService {
   async queryLogs(filters: AuditLogQueryFilters = {}) {
     const { limit = 50, offset = 0 } = filters;
 
-    return prisma.auditLog.findMany({
-      where: buildWhere(filters),
-      orderBy: { createdAt: "desc" },
-      take: limit,
-      skip: offset,
-    });
+    try {
+      return await prisma.auditLog.findMany({
+        where: buildWhere(filters),
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        skip: offset,
+      });
+    } catch (error) {
+      if (isMissingAuditTableError(error)) {
+        logger.warn("AuditLog table missing; returning empty audit log list");
+        return [];
+      }
+
+      throw error;
+    }
   }
 
   async countLogs(filters: AuditLogQueryFilters = {}): Promise<number> {
-    return prisma.auditLog.count({
-      where: buildWhere(filters),
-    });
+    try {
+      return await prisma.auditLog.count({
+        where: buildWhere(filters),
+      });
+    } catch (error) {
+      if (isMissingAuditTableError(error)) {
+        logger.warn("AuditLog table missing; returning zero audit log count");
+        return 0;
+      }
+
+      throw error;
+    }
   }
 
   async queryLogsPage(filters: AuditLogQueryFilters = {}) {
@@ -99,13 +132,22 @@ class AuditLogService {
   async countCriticalActions(userId: string, action: string, windowHours: number = 24): Promise<number> {
     const since = new Date(Date.now() - windowHours * 60 * 60 * 1000);
 
-    const result = await prisma.auditLog.count({
-      where: {
-        userId,
-        action,
-        createdAt: { gte: since },
-      },
-    });
+    let result = 0;
+    try {
+      result = await prisma.auditLog.count({
+        where: {
+          userId,
+          action,
+          createdAt: { gte: since },
+        },
+      });
+    } catch (error) {
+      if (!isMissingAuditTableError(error)) {
+        throw error;
+      }
+
+      logger.warn("AuditLog table missing; returning zero critical action count");
+    }
 
     return result;
   }
