@@ -9,6 +9,16 @@ import { prisma } from "../../infra/database/prisma.js";
 import { logger } from "../../config/logger.js";
 import { emailService } from "../../services/email/email.service.js";
 
+function isPrismaRefreshTokenStorageError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = (error as { code?: string }).code;
+  // P2021: table missing, P2022: column missing, P2023: inconsistent column data.
+  return code === "P2021" || code === "P2022" || code === "P2023";
+}
+
 export class AuthService {
   constructor(
     private readonly fastify: FastifyInstance,
@@ -135,11 +145,25 @@ export class AuthService {
     }
     const expiresAt = new Date(decodedRefresh.exp * 1000);
 
-    await this.repository.createRefreshToken({
-      tokenHash: refreshTokenHash,
-      userId: user.id,
-      expiresAt,
-    });
+    try {
+      await this.repository.createRefreshToken({
+        tokenHash: refreshTokenHash,
+        userId: user.id,
+        expiresAt,
+      });
+    } catch (error) {
+      logger.error({ err: error, userId: user.id }, "Failed to persist refresh token");
+
+      if (!isPrismaRefreshTokenStorageError(error)) {
+        throw error;
+      }
+
+      // Degrade gracefully so login/register stay available during schema drift incidents.
+      logger.warn(
+        { userId: user.id },
+        "Refresh token storage unavailable; continuing without persisted refresh token",
+      );
+    }
 
     return { accessToken, refreshToken };
   }

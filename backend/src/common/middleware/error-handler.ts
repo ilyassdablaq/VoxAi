@@ -52,7 +52,7 @@ export function errorHandler(error: FastifyError | Error, request: FastifyReques
     },
   });
 
-  logger.error({ error }, "Unhandled server error");
+  logger.error({ err: error, url: request.url, method: request.method }, "Unhandled server error");
 
   reply.status(500).send({
     error: {
