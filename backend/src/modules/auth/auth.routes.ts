@@ -19,9 +19,14 @@ function applyAuthCookies(
   accessToken: string,
   refreshToken: string,
 ): void {
-  const typedFastify = fastify as FastifyInstance & { refreshJwt: { decode: (token: string) => { exp?: number } | null } };
+  const typedFastify = fastify as FastifyInstance & {
+    jwt: { decode: (token: string) => { exp?: number } | null };
+    refreshJwtDecode?: (token: string) => { exp?: number } | null;
+    refreshJwt?: { decode: (token: string) => { exp?: number } | null };
+  };
   const accessDecoded = typedFastify.jwt.decode(accessToken) as { exp?: number } | null;
-  const refreshDecoded = typedFastify.refreshJwt.decode(refreshToken);
+  const refreshDecode = typedFastify.refreshJwtDecode ?? typedFastify.refreshJwt?.decode;
+  const refreshDecoded = refreshDecode ? refreshDecode(refreshToken) : null;
 
   if (!accessDecoded?.exp || !refreshDecoded?.exp) {
     throw new AppError(500, "TOKEN_ISSUE_FAILED", "Failed to determine auth cookie expiry");

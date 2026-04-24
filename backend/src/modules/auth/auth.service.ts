@@ -25,12 +25,31 @@ export class AuthService {
     private readonly repository: AuthRepository,
   ) {}
 
-  private get refreshJwt() {
-    return (this.fastify as any).refreshJwt as {
-      sign: (payload: Record<string, unknown>, options?: Record<string, unknown>) => string;
-      verify: (token: string) => Promise<Record<string, unknown>>;
-      decode: (token: string) => { exp?: number } | null;
-    };
+  private get refreshJwtSign() {
+    const candidate = (this.fastify as any).refreshJwtSign ?? (this.fastify as any).refreshJwt?.sign;
+    if (typeof candidate !== "function") {
+      throw new AppError(500, "TOKEN_ISSUE_FAILED", "Refresh token signer is not configured");
+    }
+
+    return candidate as (payload: Record<string, unknown>, options?: Record<string, unknown>) => string;
+  }
+
+  private get refreshJwtVerify() {
+    const candidate = (this.fastify as any).refreshJwtVerify ?? (this.fastify as any).refreshJwt?.verify;
+    if (typeof candidate !== "function") {
+      throw new AppError(500, "TOKEN_ISSUE_FAILED", "Refresh token verifier is not configured");
+    }
+
+    return candidate as (token: string) => Promise<Record<string, unknown>>;
+  }
+
+  private get refreshJwtDecode() {
+    const candidate = (this.fastify as any).refreshJwtDecode ?? (this.fastify as any).refreshJwt?.decode;
+    if (typeof candidate !== "function") {
+      throw new AppError(500, "TOKEN_ISSUE_FAILED", "Refresh token decoder is not configured");
+    }
+
+    return candidate as (token: string) => { exp?: number } | null;
   }
 
   async register(payload: RegisterInput) {
@@ -92,7 +111,7 @@ export class AuthService {
 
     let verifiedPayload: { sub?: string; email?: string; role?: "USER" | "ADMIN"; type?: string } | null;
     try {
-      verifiedPayload = (await this.refreshJwt.verify(payload.refreshToken)) as {
+      verifiedPayload = (await this.refreshJwtVerify(payload.refreshToken)) as {
         sub?: string;
         email?: string;
         role?: "USER" | "ADMIN";
@@ -130,7 +149,7 @@ export class AuthService {
       },
     );
 
-    const refreshToken = this.refreshJwt.sign(
+    const refreshToken = this.refreshJwtSign(
       { email: user.email, role: user.role, type: "refresh", jti: randomUUID() },
       {
         sub: user.id,
@@ -139,7 +158,7 @@ export class AuthService {
     );
 
     const refreshTokenHash = this.hashToken(refreshToken);
-    const decodedRefresh = this.refreshJwt.decode(refreshToken);
+    const decodedRefresh = this.refreshJwtDecode(refreshToken);
     if (!decodedRefresh?.exp) {
       throw new AppError(500, "TOKEN_ISSUE_FAILED", "Failed to determine refresh token expiry");
     }
