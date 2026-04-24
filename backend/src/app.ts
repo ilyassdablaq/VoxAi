@@ -67,10 +67,7 @@ export async function buildApp() {
   });
 
   await app.register(jwt, {
-    namespace: "refresh",
-    jwtSign: "refreshJwtSign",
-    jwtVerify: "refreshJwtVerify",
-    jwtDecode: "refreshJwtDecode",
+    namespace: "refreshJwt",
     secret: env.JWT_REFRESH_SECRET,
   });
 

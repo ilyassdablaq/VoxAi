@@ -25,8 +25,14 @@ export class AuthService {
     private readonly repository: AuthRepository,
   ) {}
 
+  private get refreshJwtApi() {
+    const root = this.fastify as any;
+    const namespaced = root.jwt?.refreshJwt ?? root.jwt?.refresh;
+    return namespaced ?? root.refreshJwt;
+  }
+
   private get refreshJwtSign() {
-    const candidate = (this.fastify as any).refreshJwtSign ?? (this.fastify as any).refreshJwt?.sign;
+    const candidate = this.refreshJwtApi?.sign;
     if (typeof candidate !== "function") {
       throw new AppError(500, "TOKEN_ISSUE_FAILED", "Refresh token signer is not configured");
     }
@@ -35,7 +41,7 @@ export class AuthService {
   }
 
   private get refreshJwtVerify() {
-    const candidate = (this.fastify as any).refreshJwtVerify ?? (this.fastify as any).refreshJwt?.verify;
+    const candidate = this.refreshJwtApi?.verify;
     if (typeof candidate !== "function") {
       throw new AppError(500, "TOKEN_ISSUE_FAILED", "Refresh token verifier is not configured");
     }
@@ -44,7 +50,7 @@ export class AuthService {
   }
 
   private get refreshJwtDecode() {
-    const candidate = (this.fastify as any).refreshJwtDecode ?? (this.fastify as any).refreshJwt?.decode;
+    const candidate = this.refreshJwtApi?.decode;
     if (typeof candidate !== "function") {
       throw new AppError(500, "TOKEN_ISSUE_FAILED", "Refresh token decoder is not configured");
     }

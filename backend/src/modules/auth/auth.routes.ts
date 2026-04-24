@@ -20,12 +20,15 @@ function applyAuthCookies(
   refreshToken: string,
 ): void {
   const typedFastify = fastify as FastifyInstance & {
-    jwt: { decode: (token: string) => { exp?: number } | null };
-    refreshJwtDecode?: (token: string) => { exp?: number } | null;
+    jwt: {
+      decode: (token: string) => { exp?: number } | null;
+      refreshJwt?: { decode: (token: string) => { exp?: number } | null };
+      refresh?: { decode: (token: string) => { exp?: number } | null };
+    };
     refreshJwt?: { decode: (token: string) => { exp?: number } | null };
   };
   const accessDecoded = typedFastify.jwt.decode(accessToken) as { exp?: number } | null;
-  const refreshDecode = typedFastify.refreshJwtDecode ?? typedFastify.refreshJwt?.decode;
+  const refreshDecode = typedFastify.jwt?.refreshJwt?.decode ?? typedFastify.jwt?.refresh?.decode ?? typedFastify.refreshJwt?.decode;
   const refreshDecoded = refreshDecode ? refreshDecode(refreshToken) : null;
 
   if (!accessDecoded?.exp || !refreshDecoded?.exp) {
