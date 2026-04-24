@@ -41,7 +41,14 @@ export function registerWebSocketGateway(
     });
 
     try {
-      const token = (request as { cookies?: { accessToken?: string } }).cookies?.accessToken;
+      // Token aus Query-String oder Cookie lesen
+      let token: string | undefined;
+      try {
+        const url = new URL(request.url, `http://${request.headers.host}`);
+        token = url.searchParams.get("token") || (request as { cookies?: { accessToken?: string } }).cookies?.accessToken;
+      } catch {
+        token = (request as { cookies?: { accessToken?: string } }).cookies?.accessToken;
+      }
 
       if (!token) {
         typedSocket.send(

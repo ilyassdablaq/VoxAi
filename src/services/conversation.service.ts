@@ -60,11 +60,14 @@ export type ConversationSocketEvent = AssistantResponseEvent | AssistantDeltaEve
 const WS_BASE_CANDIDATES = Array.from(new Set([API_BASE, ...API_BASE_CANDIDATES]));
 let wsBaseIndex = 0;
 
+import { authService } from "./auth.service";
 function buildWebSocketUrl(baseUrl: string, conversationId: string) {
   const parsed = new URL(baseUrl);
   const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+  const token = authService.getAccessToken();
+  const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
   return {
-    url: `${protocol}//${parsed.host}/ws/conversations/${conversationId}`,
+    url: `${protocol}//${parsed.host}/ws/conversations/${conversationId}${tokenParam}`,
   };
 }
 
@@ -109,7 +112,6 @@ export const conversationService = {
     wsBaseIndex += 1;
     const { url } = buildWebSocketUrl(selectedBase, conversationId);
     const socket = new WebSocket(url);
-
     return socket;
   },
 };
