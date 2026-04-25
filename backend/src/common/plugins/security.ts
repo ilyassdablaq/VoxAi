@@ -10,23 +10,29 @@ import { AppError } from "../errors/app-error.js";
 import { logger } from "../../config/logger.js";
 import { PlanCheckService } from "../services/plan-check.service.js";
 
+// Allowlist für externe Einbindung: Passe Domains nach Bedarf an
+const ALLOWED_ORIGINS = [
+  /^https:\/\/([\w-]+\.)*vercel\.app$/,
+  /^https:\/\/[a-z0-9-]+\.deine-domain\.tld$/,
+  /^https:\/\/[a-z0-9-]+\.partnerseite\.tld$/,
+];
+
 function isAllowedOrigin(origin: string): boolean {
   if (origin === env.APP_ORIGIN) {
     return true;
   }
-  // Erlaube alle Vercel-Deployments (z.B. https://voxflow-ai-site-*.vercel.app)
-  if (/^https:\/\/([\w-]+\.)*vercel\.app$/.test(origin)) {
-    return true;
+  for (const pattern of ALLOWED_ORIGINS) {
+    if (pattern.test(origin)) return true;
   }
-  if (env.NODE_ENV === "production") {
-    return false;
+  if (env.NODE_ENV !== "production") {
+    try {
+      const parsed = new URL(origin);
+      return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+    } catch {
+      return false;
+    }
   }
-  try {
-    const parsed = new URL(origin);
-    return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 export async function registerSecurityPlugins(fastify: FastifyInstance): Promise<void> {
@@ -56,10 +62,13 @@ export async function registerSecurityPlugins(fastify: FastifyInstance): Promise
         callback(null, true);
         return;
       }
-
       callback(new Error("CORS origin not allowed"), false);
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
 
   // Global rate limit (catches everything)
