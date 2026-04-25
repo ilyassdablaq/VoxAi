@@ -14,11 +14,13 @@ function isAllowedOrigin(origin: string): boolean {
   if (origin === env.APP_ORIGIN) {
     return true;
   }
-
+  // Erlaube alle Vercel-Deployments (z.B. https://voxflow-ai-site-*.vercel.app)
+  if (/^https:\/\/([\w-]+\.)*vercel\.app$/.test(origin)) {
+    return true;
+  }
   if (env.NODE_ENV === "production") {
     return false;
   }
-
   try {
     const parsed = new URL(origin);
     return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
