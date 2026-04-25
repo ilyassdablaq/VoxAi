@@ -235,7 +235,7 @@ export default function Integrations() {
       return "";
     }
 
-    const scriptHost = typeof window !== "undefined" ? window.location.origin : "https://yourapp.com";
+    const scriptHost = "https://voxflow-ai-site.vercel.app";
 
     return `<script src="${scriptHost}/chatbot.js" data-embed-key="${escapeHtmlAttribute(effectiveData.embedKey)}" data-api-base="${escapeHtmlAttribute(API_BASE)}" data-theme="${escapeHtmlAttribute(effectiveData.themeColor)}" data-theme-mode="${escapeHtmlAttribute(effectiveData.themeMode)}" data-position="${escapeHtmlAttribute(effectiveData.position)}" data-language="${escapeHtmlAttribute(effectiveData.language)}" data-bot-name="${escapeHtmlAttribute(effectiveData.botName)}" data-launcher-text="${escapeHtmlAttribute(effectiveData.launcherText)}" data-launcher-icon="${escapeHtmlAttribute(effectiveData.launcherIcon)}" data-initial-message="${escapeHtmlAttribute(effectiveData.initialBotMessage || DEFAULT_INITIAL_BOT_MESSAGE)}" data-max-session-questions="${effectiveData.maxSessionQuestions}" data-microphone-enabled="${String(effectiveData.microphoneEnabled)}" data-loading-style="${loadingStyle}"><\/script>`;
   }, [effectiveData, loadingStyle]);
