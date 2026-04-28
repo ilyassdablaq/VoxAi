@@ -11,10 +11,16 @@ import { logger } from "../../config/logger.js";
 import { PlanCheckService } from "../services/plan-check.service.js";
 
 // Allowlist für externe Einbindung: Passe Domains nach Bedarf an
+// Default: alle Origins erlaubt (für SaaS-Embed). In Produktion anpassen!
 const ALLOWED_ORIGINS = [/.*/];
 
 function isAllowedOrigin(origin: string): boolean {
-  return true; // Erlaube alle Origins (für SaaS-Embed)
+  if (!origin) return false;
+  return ALLOWED_ORIGINS.some((pattern) => {
+    if (typeof pattern === "string") return pattern === origin;
+    if (pattern instanceof RegExp) return pattern.test(origin);
+    return false;
+  });
 }
 
 export async function registerSecurityPlugins(fastify: FastifyInstance): Promise<void> {
