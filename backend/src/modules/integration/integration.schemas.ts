@@ -11,6 +11,8 @@ export const integrationSettingsSchema = z.object({
   initialBotMessage: z.string().min(1).max(400).default("Hi. Send me a message and I will reply here."),
   maxSessionQuestions: z.number().int().min(1).max(20).default(3),
   microphoneEnabled: z.boolean().default(false),
+  consentRequired: z.boolean().default(true),
+  privacyPolicyUrl: z.string().max(1000).default(""),
 });
 
 export const embedChatSchema = z.object({

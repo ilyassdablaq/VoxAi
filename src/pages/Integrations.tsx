@@ -100,6 +100,8 @@ export default function Integrations() {
   const [initialBotMessage, setInitialBotMessage] = useState(DEFAULT_INITIAL_BOT_MESSAGE);
   const [maxSessionQuestions, setMaxSessionQuestions] = useState(DEFAULT_MAX_SESSION_QUESTIONS);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
+  const [consentRequired, setConsentRequired] = useState(true);
+  const [privacyPolicyUrl, setPrivacyPolicyUrl] = useState("");
 
   const loadingStyle = useMemo(() => {
     if (subscription?.effectivePlan === "ENTERPRISE") {
@@ -132,6 +134,8 @@ export default function Integrations() {
     setInitialBotMessage(data.initialBotMessage?.trim() || DEFAULT_INITIAL_BOT_MESSAGE);
     setMaxSessionQuestions(Number.isFinite(data.maxSessionQuestions) ? Math.min(20, Math.max(1, data.maxSessionQuestions)) : DEFAULT_MAX_SESSION_QUESTIONS);
     setMicrophoneEnabled(Boolean(data.microphoneEnabled));
+    setConsentRequired(data.consentRequired ?? true);
+    setPrivacyPolicyUrl(typeof data.privacyPolicyUrl === "string" ? data.privacyPolicyUrl.trim() : "");
   }, [data]);
 
   const effectiveData = useMemo(() => {
@@ -141,6 +145,7 @@ export default function Integrations() {
     const nextLauncherIcon = launcherIcon || data?.launcherIcon || "chat";
     const nextInitialBotMessage = initialBotMessage.trim() || data?.initialBotMessage || DEFAULT_INITIAL_BOT_MESSAGE;
     const nextMaxSessionQuestions = Math.min(20, Math.max(1, Number.isFinite(maxSessionQuestions) ? maxSessionQuestions : data?.maxSessionQuestions || DEFAULT_MAX_SESSION_QUESTIONS));
+    const nextPrivacyPolicyUrl = privacyPolicyUrl.trim();
 
     return data
       ? {
@@ -155,9 +160,11 @@ export default function Integrations() {
           initialBotMessage: nextInitialBotMessage,
           maxSessionQuestions: nextMaxSessionQuestions,
           microphoneEnabled,
+          consentRequired,
+          privacyPolicyUrl: nextPrivacyPolicyUrl,
         }
       : null;
-  }, [botName, data, initialBotMessage, language, launcherIcon, launcherText, maxSessionQuestions, microphoneEnabled, position, themeColor, themeMode]);
+  }, [botName, consentRequired, data, initialBotMessage, language, launcherIcon, launcherText, maxSessionQuestions, microphoneEnabled, position, privacyPolicyUrl, themeColor, themeMode]);
 
   const selectedThemePreset = useMemo(() => {
     const normalized = (themeColor || data?.themeColor || "").toLowerCase();
@@ -179,6 +186,8 @@ export default function Integrations() {
         initialBotMessage: initialBotMessage.trim() || data?.initialBotMessage || DEFAULT_INITIAL_BOT_MESSAGE,
         maxSessionQuestions: Math.min(20, Math.max(1, maxSessionQuestions)),
         microphoneEnabled,
+        consentRequired,
+        privacyPolicyUrl: privacyPolicyUrl.trim(),
       }),
     onSuccess: (updated) => {
       const nextInitialBotMessage = initialBotMessage.trim() || DEFAULT_INITIAL_BOT_MESSAGE;
@@ -191,6 +200,8 @@ export default function Integrations() {
           ? Math.min(20, Math.max(1, updated.maxSessionQuestions))
           : nextMaxSessionQuestions,
         microphoneEnabled: Boolean(updated.microphoneEnabled),
+        consentRequired: updated.consentRequired ?? consentRequired,
+        privacyPolicyUrl: typeof updated.privacyPolicyUrl === "string" ? updated.privacyPolicyUrl.trim() : privacyPolicyUrl.trim(),
       };
 
       void queryClient.setQueryData(["integration-settings"], normalized);
@@ -204,6 +215,8 @@ export default function Integrations() {
       setInitialBotMessage(normalized.initialBotMessage);
       setMaxSessionQuestions(normalized.maxSessionQuestions);
       setMicrophoneEnabled(normalized.microphoneEnabled);
+      setConsentRequired(normalized.consentRequired);
+      setPrivacyPolicyUrl(normalized.privacyPolicyUrl);
       toast({ title: "Saved", description: "Integration settings updated." });
     },
     onError: (error) => {
@@ -237,7 +250,7 @@ export default function Integrations() {
 
     const scriptHost = "https://voxflow-ai-site.vercel.app";
 
-    return `<script src="${scriptHost}/chatbot.js" data-embed-key="${escapeHtmlAttribute(effectiveData.embedKey)}" data-api-base="${escapeHtmlAttribute(API_BASE)}" data-theme="${escapeHtmlAttribute(effectiveData.themeColor)}" data-theme-mode="${escapeHtmlAttribute(effectiveData.themeMode)}" data-position="${escapeHtmlAttribute(effectiveData.position)}" data-language="${escapeHtmlAttribute(effectiveData.language)}" data-bot-name="${escapeHtmlAttribute(effectiveData.botName)}" data-launcher-text="${escapeHtmlAttribute(effectiveData.launcherText)}" data-launcher-icon="${escapeHtmlAttribute(effectiveData.launcherIcon)}" data-initial-message="${escapeHtmlAttribute(effectiveData.initialBotMessage || DEFAULT_INITIAL_BOT_MESSAGE)}" data-max-session-questions="${effectiveData.maxSessionQuestions}" data-microphone-enabled="${String(effectiveData.microphoneEnabled)}" data-loading-style="${loadingStyle}"><\/script>`;
+    return `<script src="${scriptHost}/chatbot.js" data-embed-key="${escapeHtmlAttribute(effectiveData.embedKey)}" data-api-base="${escapeHtmlAttribute(API_BASE)}" data-theme="${escapeHtmlAttribute(effectiveData.themeColor)}" data-theme-mode="${escapeHtmlAttribute(effectiveData.themeMode)}" data-position="${escapeHtmlAttribute(effectiveData.position)}" data-language="${escapeHtmlAttribute(effectiveData.language)}" data-bot-name="${escapeHtmlAttribute(effectiveData.botName)}" data-launcher-text="${escapeHtmlAttribute(effectiveData.launcherText)}" data-launcher-icon="${escapeHtmlAttribute(effectiveData.launcherIcon)}" data-initial-message="${escapeHtmlAttribute(effectiveData.initialBotMessage || DEFAULT_INITIAL_BOT_MESSAGE)}" data-max-session-questions="${effectiveData.maxSessionQuestions}" data-microphone-enabled="${String(effectiveData.microphoneEnabled)}" data-consent-required="${String(effectiveData.consentRequired)}" data-privacy-url="${escapeHtmlAttribute(effectiveData.privacyPolicyUrl || "")}" data-loading-style="${loadingStyle}"><\/script>`;
   }, [effectiveData, loadingStyle]);
 
   const copySnippet = async () => {
@@ -380,7 +393,7 @@ export default function Integrations() {
                 rows={3}
                 placeholder={DEFAULT_INITIAL_BOT_MESSAGE}
               />
-              <p className="text-xs text-muted-foreground">This message is shown when the chat opens before the user sends anything.</p>
+              <p className="text-xs text-muted-foreground">This message is shown when the chat opens before the user sends anything. Add a blank line to split it into multiple welcome bubbles.</p>
             </div>
 
             <div className="space-y-2">
@@ -453,6 +466,26 @@ export default function Integrations() {
               <Switch checked={microphoneEnabled} onCheckedChange={setMicrophoneEnabled} aria-label="Enable microphone" />
             </div>
 
+            <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/20 px-4 py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Require Consent Before Chat</label>
+                  <p className="text-xs text-muted-foreground">Show a privacy notice with an approval button before the visitor can type a message.</p>
+                </div>
+                <Switch checked={consentRequired} onCheckedChange={setConsentRequired} aria-label="Require consent before chat" />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Privacy Policy URL</label>
+                <Input
+                  value={privacyPolicyUrl}
+                  onChange={(event) => setPrivacyPolicyUrl(event.target.value.slice(0, 1000))}
+                  placeholder="https://yourdomain.com/privacy"
+                />
+                <p className="text-xs text-muted-foreground">Optional. If provided, the notice links directly to your privacy policy.</p>
+              </div>
+            </div>
+
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !canSave} className="min-h-11">
                 {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -487,6 +520,8 @@ export default function Integrations() {
               initialBotMessage={effectiveData?.initialBotMessage ?? data.initialBotMessage ?? DEFAULT_INITIAL_BOT_MESSAGE}
               maxSessionQuestions={effectiveData?.maxSessionQuestions ?? data.maxSessionQuestions ?? DEFAULT_MAX_SESSION_QUESTIONS}
               microphoneEnabled={effectiveData?.microphoneEnabled ?? data.microphoneEnabled ?? false}
+              consentRequired={effectiveData?.consentRequired ?? data.consentRequired ?? true}
+              privacyPolicyUrl={effectiveData?.privacyPolicyUrl ?? data.privacyPolicyUrl ?? ""}
               themeMode={effectiveData?.themeMode ?? data.themeMode ?? "light"}
               loadingStyle={loadingStyle}
             />

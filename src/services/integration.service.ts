@@ -12,6 +12,8 @@ export interface IntegrationSettings {
   initialBotMessage: string;
   maxSessionQuestions: number;
   microphoneEnabled: boolean;
+  consentRequired: boolean;
+  privacyPolicyUrl: string;
   embedKey: string;
   updatedAt: string;
 }
@@ -32,6 +34,8 @@ export const integrationService = {
     initialBotMessage: string;
     maxSessionQuestions: number;
     microphoneEnabled: boolean;
+    consentRequired: boolean;
+    privacyPolicyUrl: string;
   }) {
     return apiClient.put<IntegrationSettings>("/api/integrations/settings", payload);
   },
