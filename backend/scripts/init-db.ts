@@ -1,9 +1,28 @@
-import { exec } from "child_process";
-import { promisify } from "util";
 import { PrismaClient } from "@prisma/client";
+import { spawn } from "child_process";
 
-const execAsync = promisify(exec);
 const prisma = new PrismaClient();
+
+function execCommand(command: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args, {
+      stdio: "inherit",
+      shell: true,
+    });
+
+    proc.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Command failed with code ${code}`));
+      }
+    });
+
+    proc.on("error", (error) => {
+      reject(error);
+    });
+  });
+}
 
 async function initDb() {
   console.log("[DB INIT] Starting database initialization...");
@@ -15,10 +34,10 @@ async function initDb() {
         SELECT FROM information_schema.tables
         WHERE table_schema = 'public'
         AND table_name = 'User'
-      );
+      ) as exists;
     `;
 
-    const tableExists = (result as any[])[0].exists;
+    const tableExists = (result as any[])[0]?.exists;
 
     if (tableExists) {
       console.log("[DB INIT] User table already exists, skipping initialization");
@@ -26,20 +45,22 @@ async function initDb() {
       return;
     }
 
-    console.log("[DB INIT] User table not found, running prisma db push...");
+    console.log("[DB INIT] User table not found, running prisma migrate deploy...");
 
     try {
-      const { stdout, stderr } = await execAsync("npx prisma db push --skip-generate", {
-        cwd: process.cwd(),
-        env: process.env,
-      });
-
-      console.log("[DB INIT] Prisma db push output:", stdout);
-      if (stderr) console.log("[DB INIT] Prisma db push stderr:", stderr);
-      console.log("[DB INIT] Database initialized successfully");
+      await execCommand("node_modules/.bin/prisma", ["migrate", "deploy", "--skip-generate"]);
+      console.log("[DB INIT] Database initialization successful");
     } catch (error) {
-      console.error("[DB INIT] Prisma db push failed:", error);
-      throw error;
+      console.error("[DB INIT] Prisma migrate deploy failed:", error);
+      console.log("[DB INIT] Attempting prisma db push...");
+
+      try {
+        await execCommand("node_modules/.bin/prisma", ["db", "push", "--skip-generate", "--accept-data-loss"]);
+        console.log("[DB INIT] Database initialization successful via db push");
+      } catch (pushError) {
+        console.error("[DB INIT] Prisma db push also failed:", pushError);
+        throw pushError;
+      }
     }
   } catch (error) {
     console.error("[DB INIT] Fatal error during database initialization:", error);
