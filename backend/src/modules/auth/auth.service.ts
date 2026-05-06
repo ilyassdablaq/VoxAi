@@ -60,7 +60,7 @@ export class AuthService {
     return candidate as (token: string) => { exp?: number } | null;
   }
 
-  async register(payload: RegisterInput, context?: AuthAttemptContext) {
+  async register(payload: RegisterInput, _context?: AuthAttemptContext) {
     const existingUser = await this.repository.findUserByEmail(payload.email);
     if (existingUser) {
       throw new AppError(409, "EMAIL_ALREADY_EXISTS", "A user with this email already exists");
