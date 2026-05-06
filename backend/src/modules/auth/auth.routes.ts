@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyReply } from "fastify";
 import { validate } from "../../common/middleware/validate.js";
 import { AuthRepository } from "./auth.repository.js";
 import { AuthService } from "./auth.service.js";
-import { LoginInput, RefreshInput, RegisterInput, ForgotPasswordInput, ResetPasswordInput, loginSchema, refreshSchema, registerSchema, forgotPasswordSchema, resetPasswordSchema } from "./auth.schemas.js";
+import { LoginInput, RefreshInput, RegisterInput, ForgotPasswordInput, ResetPasswordInput, loginSchema, registerSchema, forgotPasswordSchema, resetPasswordSchema } from "./auth.schemas.js";
 import { auditLogService } from "../../common/services/audit-log.service.js";
 import { AppError } from "../../common/errors/app-error.js";
 
