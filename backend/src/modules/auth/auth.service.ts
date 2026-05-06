@@ -8,6 +8,8 @@ import { LoginInput, RefreshInput, RegisterInput, ForgotPasswordInput, ResetPass
 import { prisma } from "../../infra/database/prisma.js";
 import { logger } from "../../config/logger.js";
 import { emailService } from "../../services/email/email.service.js";
+import { authRateLimitService, AuthAttemptContext } from "./auth-rate-limit.service.js";
+import { emailVerificationService } from "./email-verification.service.js";
 
 function isPrismaRefreshTokenStorageError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
@@ -58,7 +60,7 @@ export class AuthService {
     return candidate as (token: string) => { exp?: number } | null;
   }
 
-  async register(payload: RegisterInput) {
+  async register(payload: RegisterInput, context?: AuthAttemptContext) {
     const existingUser = await this.repository.findUserByEmail(payload.email);
     if (existingUser) {
       throw new AppError(409, "EMAIL_ALREADY_EXISTS", "A user with this email already exists");
@@ -71,6 +73,17 @@ export class AuthService {
       passwordHash,
     });
 
+    // Verifizierungs-Mail anstoßen (best-effort: Registrierung soll nicht
+    // an Email-Provider-Hicksern scheitern).
+    try {
+      await emailVerificationService.issueAndSend({ userId: user.id, email: user.email });
+    } catch (error) {
+      logger.warn(
+        { err: error, userId: user.id },
+        "Could not send verification email at registration; user must request resend",
+      );
+    }
+
     const tokens = await this.issueTokens({ id: user.id, email: user.email, role: user.role });
     return {
       user: {
@@ -78,21 +91,67 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        emailVerified: false,
       },
       ...tokens,
     };
   }
 
-  async login(payload: LoginInput) {
+  async login(payload: LoginInput, context: AuthAttemptContext) {
+    // 1. Rate-Limit-Vorabprüfung
+    await authRateLimitService.assertNotLocked(context);
+
+    // 2. User suchen — bei Nichtfund trotzdem failure-counter setzen,
+    //    sonst gibt der Server eine Timing-side-channel preis (existing email).
     const user = await this.repository.findUserByEmail(payload.email);
     if (!user) {
+      await authRateLimitService.recordFailure(context);
       throw new AppError(401, "INVALID_CREDENTIALS", "Invalid email or password");
+    }
+
+    // 3. Lockout am DB-User (für persistente Sperren über Redis-Restart hinweg)
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const retryAfterSec = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 1000);
+      throw new AppError(429, "AUTH_LOCKED", `Account locked. Try again in ${retryAfterSec}s.`, { retryAfterSec });
     }
 
     const isPasswordValid = await bcrypt.compare(payload.password, user.passwordHash);
     if (!isPasswordValid) {
+      const result = await authRateLimitService.recordFailure(context);
+
+      // Persistierten Lockout am User setzen, wenn Schwelle hoch genug
+      if (result.lockedSec > 0) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            failedLoginAttempts: { increment: 1 },
+            lockedUntil: new Date(Date.now() + result.lockedSec * 1000),
+          },
+        });
+      } else {
+        await prisma.user
+          .update({
+            where: { id: user.id },
+            data: { failedLoginAttempts: { increment: 1 } },
+          })
+          .catch(() => undefined);
+      }
+
       throw new AppError(401, "INVALID_CREDENTIALS", "Invalid email or password");
     }
+
+    // 4. Erfolg → Counter resetten + lastLogin tracken
+    await authRateLimitService.recordSuccess(context);
+    await prisma.user
+      .update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          lastLoginAt: new Date(),
+        },
+      })
+      .catch(() => undefined);
 
     const tokens = await this.issueTokens({ id: user.id, email: user.email, role: user.role });
 
@@ -102,6 +161,7 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        emailVerified: Boolean(user.emailVerifiedAt),
       },
       ...tokens,
     };

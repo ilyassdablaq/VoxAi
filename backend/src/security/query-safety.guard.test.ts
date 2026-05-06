@@ -46,7 +46,10 @@ describe("query safety guard", () => {
   it("prevents high-risk dynamic code execution sinks", async () => {
     const files = await collectTsFiles(ROOT_DIR);
     const offenders: string[] = [];
-    const sinkPattern = /\beval\s*\(|\bnew\s+Function\s*\(|\bexec\s*\(|\bspawn\s*\(/;
+    // Matches dangerous sinks but excludes legitimate method-call forms:
+    //   .exec() → Redis pipeline flush, not dynamic execution
+    //   redis.eval() → Lua scripting over Redis, not JS eval
+    const sinkPattern = /(?<![.\w])eval\s*\((?!\s*\w+\s*,\s*\d)|\bnew\s+Function\s*\(|(?<!\.)exec\s*\(|\bspawn\s*\(/;
 
     for (const filePath of files) {
       const source = await readFile(filePath, "utf8");

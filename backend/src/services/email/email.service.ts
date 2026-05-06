@@ -15,6 +15,11 @@ interface PasswordResetPayload {
   resetLink: string;
 }
 
+interface VerificationPayload {
+  email: string;
+  verifyLink: string;
+}
+
 interface TestEmailPayload {
   triggeredBy: string;
 }
@@ -75,7 +80,7 @@ export class EmailService {
   }
 
   private async sendEmail(
-    kind: "contact_notification" | "password_reset" | "integration_test",
+    kind: "contact_notification" | "password_reset" | "integration_test" | "email_verification",
     payload: Parameters<Resend["emails"]["send"]>[0],
   ): Promise<string> {
     if (!this.client && env.NODE_ENV === "test") {
@@ -157,6 +162,30 @@ export class EmailService {
         `<p><a href="${escapeHtml(payload.resetLink)}" style="display:inline-block;padding:10px 16px;background:#111;color:#fff;text-decoration:none;border-radius:6px;">Reset password</a></p>`,
         `<p>If the button does not work, use this link:<br /><a href="${escapeHtml(payload.resetLink)}">${escapeHtml(payload.resetLink)}</a></p>`,
         "<p>This link expires in 1 hour. If you did not request this, you can ignore this email.</p>",
+        "</div>",
+      ].join(""),
+    });
+  }
+
+  async sendVerificationEmail(payload: VerificationPayload): Promise<string> {
+    return this.sendEmail("email_verification", {
+      from: this.fromEmail as string,
+      to: payload.email,
+      subject: "Verify your VoxAI email address",
+      text: [
+        "Welcome to VoxAI!",
+        "Please verify your email address by visiting the link below:",
+        payload.verifyLink,
+        "This link expires in 24 hours.",
+        "If you did not create a VoxAI account, you can safely ignore this email.",
+      ].join("\n\n"),
+      html: [
+        "<div style=\"font-family: Arial, sans-serif; color: #111; line-height: 1.5;\">",
+        "<h2 style=\"margin-bottom: 12px;\">Verify your email address</h2>",
+        "<p>Welcome to VoxAI! Please confirm your email address to activate your account.</p>",
+        `<p><a href="${escapeHtml(payload.verifyLink)}" style="display:inline-block;padding:10px 16px;background:#111;color:#fff;text-decoration:none;border-radius:6px;">Verify email</a></p>`,
+        `<p>If the button does not work, paste this link into your browser:<br /><a href="${escapeHtml(payload.verifyLink)}">${escapeHtml(payload.verifyLink)}</a></p>`,
+        "<p>This link expires in 24 hours. If you did not create a VoxAI account, you can safely ignore this email.</p>",
         "</div>",
       ].join(""),
     });

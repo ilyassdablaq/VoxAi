@@ -132,6 +132,20 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     }
   });
 
+  // Allow empty JSON body: the refresh token is read from the httpOnly cookie.
+  // Without this, browsers sending Content-Type: application/json with no body crash Fastify.
+  fastify.addContentTypeParser("application/json", { parseAs: "string" }, function (_req, body, done) {
+    if (!body || (body as string).trim() === "") {
+      done(null, null);
+      return;
+    }
+    try {
+      done(null, JSON.parse(body as string));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
   fastify.post("/api/auth/refresh", {
     config: { rateLimit: false },
   }, async (request, reply) => {
