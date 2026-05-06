@@ -16,6 +16,19 @@ export function errorHandler(error: FastifyError | Error, request: FastifyReques
     return;
   }
 
+  // Fastify throws this when Content-Type: application/json is set but the body is empty.
+  // Treat as a client error (400), not an unhandled server error, so it doesn't pollute logs.
+  const fastifyError = error as FastifyError;
+  if (fastifyError.code === "FST_ERR_CTP_EMPTY_JSON_BODY") {
+    reply.status(400).send({
+      error: {
+        code: "EMPTY_JSON_BODY",
+        message: "Request body cannot be empty when Content-Type is application/json",
+      },
+    });
+    return;
+  }
+
   if (error instanceof AppError) {
     if (error.statusCode >= 500) {
       Sentry.captureException(error, {

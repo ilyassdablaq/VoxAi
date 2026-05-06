@@ -76,6 +76,7 @@ const envSchema = z.object({
   CONTACT_RECEIVER_EMAIL: z.string().email().optional(),
   ADMIN_IP_ALLOWLIST: z.string().optional(),
   QUEUE_WORKERS_ENABLED: z.coerce.boolean().optional(),
+  DATABASE_REPLICA_URL: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

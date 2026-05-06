@@ -1,6 +1,9 @@
 import { MessageRole } from "@prisma/client";
-import { prisma } from "../../infra/database/prisma.js";
+import { prismaReadOnly } from "../../infra/database/prisma-replica.js";
 import { AnalyticsQueryInput } from "./analytics.schemas.js";
+
+// Alias so all queries below use the read replica transparently
+const prisma = prismaReadOnly;
 
 function parseRange(range: AnalyticsQueryInput["range"]): Date {
   const now = new Date();

@@ -3,8 +3,10 @@ import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { initializeSentry, Sentry } from "./config/sentry.js";
 import { connectDatabase, disconnectDatabase } from "./infra/database/prisma.js";
+import { disconnectReplica } from "./infra/database/prisma-replica.js";
 import { startWorkers } from "./infra/queue/queues.js";
 import { redis, redisPublisher, redisSubscriber } from "./infra/cache/redis.js";
+import { initializeWsBroker } from "./infra/ws/ws-broker.service.js";
 
 async function bootstrap() {
   initializeSentry();
@@ -20,6 +22,7 @@ async function bootstrap() {
   });
 
   await connectDatabase();
+  await initializeWsBroker();
   const app = await buildApp();
   const isUpstash = env.REDIS_URL.includes("upstash.io");
   const shouldStartWorkers = env.QUEUE_WORKERS_ENABLED ?? !isUpstash;
@@ -34,6 +37,7 @@ async function bootstrap() {
     await app.close();
     await Promise.all(workers.map((worker) => worker.close()));
     await disconnectDatabase();
+    await disconnectReplica();
     await Promise.all([redis.quit(), redisPublisher.quit(), redisSubscriber.quit()]);
     await Sentry.close(2000);
     process.exit(0);

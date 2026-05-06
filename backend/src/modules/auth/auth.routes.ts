@@ -100,7 +100,10 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     preHandler: [validate({ body: loginSchema })],
   }, async (request, reply) => {
     try {
-      const result = await authService.login(request.body as LoginInput);
+      const result = await authService.login(request.body as LoginInput, {
+        email: (request.body as LoginInput).email,
+        ipAddress: request.ip,
+      });
       applyAuthCookies(fastify, reply, result.accessToken, result.refreshToken);
 
       recordAuthAuditLog({

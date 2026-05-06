@@ -43,35 +43,42 @@ enum SubscriptionStatus {
 }
 
 model User {
-  id                       String             @id @default(uuid())
-  email                    String             @unique
-  passwordHash             String
-  fullName                 String
-  role                     Role               @default(USER)
-  passwordResetToken       String?
-  passwordResetExpiresAt   DateTime?
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
-  refreshTokens            RefreshToken[]
-  conversations            Conversation[]
-  contactMessages          ContactMessage[]
-  subscriptions            Subscription[]
-  adminPlanOverrides       AdminPlanOverride[] @relation("UserPlanOverrides")
-  createdPlanOverrides     AdminPlanOverride[] @relation("AdminCreatedOverrides")
-  usageRecords             Usage[]
-  apiKeys                  APIKey[]
-  sloMetrics               SloMetric[]
-  spendCap                 SpendCap?
-  retentionPolicies        RetentionPolicy[]
-  apiKeysV2                ApiKeyV2[]
-  leakedApiKeys            LeakedApiKey[]
-  webhookEvents            WebhookEvent[]
-  webhookDeliveries        WebhookDelivery[]
-  createdGoldenTests       GoldenTestSet[]
-  releaseGatesOverride     ReleaseGate[]
-  dataDeletionQueue        DataDeletionQueue[]
+  id                             String             @id @default(uuid())
+  email                          String             @unique
+  passwordHash                   String
+  fullName                       String
+  role                           Role               @default(USER)
+  passwordResetToken             String?
+  passwordResetExpiresAt         DateTime?
+  emailVerifiedAt                DateTime?
+  emailVerificationTokenHash     String?
+  emailVerificationExpiresAt     DateTime?
+  failedLoginAttempts            Int                @default(0)
+  lockedUntil                    DateTime?
+  lastLoginAt                    DateTime?
+  createdAt                      DateTime           @default(now())
+  updatedAt                      DateTime           @updatedAt
+  refreshTokens                  RefreshToken[]
+  conversations                  Conversation[]
+  contactMessages                ContactMessage[]
+  subscriptions                  Subscription[]
+  adminPlanOverrides             AdminPlanOverride[] @relation("UserPlanOverrides")
+  createdPlanOverrides           AdminPlanOverride[] @relation("AdminCreatedOverrides")
+  usageRecords                   Usage[]
+  apiKeys                        APIKey[]
+  sloMetrics                     SloMetric[]
+  spendCap                       SpendCap?
+  retentionPolicies              RetentionPolicy[]
+  apiKeysV2                      ApiKeyV2[]
+  leakedApiKeys                  LeakedApiKey[]
+  webhookEvents                  WebhookEvent[]
+  webhookDeliveries              WebhookDelivery[]
+  createdGoldenTests             GoldenTestSet[]
+  releaseGatesOverride           ReleaseGate[]
+  dataDeletionQueue              DataDeletionQueue[]
 
   @@index([createdAt])
+  @@index([email, lockedUntil])
 }
 
 model RefreshToken {

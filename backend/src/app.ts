@@ -62,6 +62,14 @@ export async function buildApp() {
     runFirst: true,
   });
 
+  // Handle empty JSON bodies gracefully (e.g., /api/auth/refresh with cookie-only auth)
+  app.addContentTypeParser("application/json", { parseAs: "string" }, async (_request: any, body: any) => {
+    if (!body || (body as string).trim() === "") {
+      return null;
+    }
+    return JSON.parse(body as string);
+  });
+
   await app.register(jwt, {
     secret: env.JWT_ACCESS_SECRET,
   });

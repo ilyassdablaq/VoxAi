@@ -20,8 +20,18 @@ vi.mock("@/infra/database/prisma", () => ({
   },
 }));
 
+vi.mock("@/modules/auth/auth-rate-limit.service", () => ({
+  authRateLimitService: {
+    assertNotLocked: vi.fn().mockResolvedValue(undefined),
+    recordFailure: vi.fn().mockResolvedValue({ failures: 1, lockedSec: 0 }),
+    recordSuccess: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 import { prisma } from "@/infra/database/prisma";
 import { emailService } from "@/services/email/email.service";
+
+const mockContext = { email: "test@example.com", ipAddress: "127.0.0.1" };
 
 describe("AuthService", () => {
   let authService: AuthService;
@@ -126,8 +136,9 @@ describe("AuthService", () => {
       mockRepository.findUserByEmail.mockResolvedValue(testFixtures.user);
       vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
       mockRepository.createRefreshToken.mockResolvedValue(undefined);
+      vi.mocked(prisma.user.update).mockResolvedValue(testFixtures.user as never);
 
-      const result = await authService.login(input);
+      const result = await authService.login(input, mockContext);
 
       expect(result.user.email).toBe(testFixtures.user.email);
       expect(result.accessToken).toBeDefined();
@@ -146,7 +157,7 @@ describe("AuthService", () => {
 
       mockRepository.findUserByEmail.mockResolvedValue(null);
 
-      await expect(authService.login(input)).rejects.toThrow(
+      await expect(authService.login(input, mockContext)).rejects.toThrow(
         expect.objectContaining({
           statusCode: 401,
           code: "INVALID_CREDENTIALS",
@@ -162,8 +173,9 @@ describe("AuthService", () => {
 
       mockRepository.findUserByEmail.mockResolvedValue(testFixtures.user);
       vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+      vi.mocked(prisma.user.update).mockResolvedValue(testFixtures.user as never);
 
-      await expect(authService.login(input)).rejects.toThrow(
+      await expect(authService.login(input, mockContext)).rejects.toThrow(
         expect.objectContaining({
           statusCode: 401,
           code: "INVALID_CREDENTIALS",
@@ -453,11 +465,12 @@ describe("AuthService", () => {
       mockRepository.findUserByEmail.mockResolvedValue(testFixtures.user);
       vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
       mockRepository.createRefreshToken.mockResolvedValue(undefined);
+      vi.mocked(prisma.user.update).mockResolvedValue(testFixtures.user as never);
 
       const result = await authService.login({
         email: testFixtures.user.email,
         password: "Password123",
-      });
+      }, mockContext);
 
       // Verify login result contains tokens (not retrieved from implicit context)
       expect(result.accessToken).toBeDefined();
