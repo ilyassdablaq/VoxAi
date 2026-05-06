@@ -100,7 +100,10 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     preHandler: [validate({ body: loginSchema })],
   }, async (request, reply) => {
     try {
-      const result = await authService.login(request.body as LoginInput);
+      const result = await authService.login(request.body as LoginInput, {
+        email: (request.body as LoginInput).email,
+        ipAddress: request.ip,
+      });
       applyAuthCookies(fastify, reply, result.accessToken, result.refreshToken);
 
       recordAuthAuditLog({
@@ -129,20 +132,6 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
         userAgent: request.headers["user-agent"],
       });
       throw error;
-    }
-  });
-
-  // Allow empty JSON body: the refresh token is read from the httpOnly cookie.
-  // Without this, browsers sending Content-Type: application/json with no body crash Fastify.
-  fastify.addContentTypeParser("application/json", { parseAs: "string" }, function (_req, body, done) {
-    if (!body || (body as string).trim() === "") {
-      done(null, null);
-      return;
-    }
-    try {
-      done(null, JSON.parse(body as string));
-    } catch (err) {
-      done(err as Error, undefined);
     }
   });
 
