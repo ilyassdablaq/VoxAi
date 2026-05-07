@@ -149,23 +149,24 @@ describe("AuthService", () => {
       );
     });
 
-    it("should throw INVALID_CREDENTIALS for non-existent user", async () => {
+    it("should throw EMAIL_NOT_FOUND for non-existent user", async () => {
       const input = {
         email: "nonexistent@example.com",
         password: "Password123",
       };
 
       mockRepository.findUserByEmail.mockResolvedValue(null);
+      vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
 
       await expect(authService.login(input, mockContext)).rejects.toThrow(
         expect.objectContaining({
           statusCode: 401,
-          code: "INVALID_CREDENTIALS",
+          code: "EMAIL_NOT_FOUND",
         })
       );
     });
 
-    it("should throw INVALID_CREDENTIALS for wrong password", async () => {
+    it("should throw WRONG_PASSWORD for wrong password", async () => {
       const input = {
         email: testFixtures.user.email,
         password: "WrongPassword",
@@ -178,7 +179,7 @@ describe("AuthService", () => {
       await expect(authService.login(input, mockContext)).rejects.toThrow(
         expect.objectContaining({
           statusCode: 401,
-          code: "INVALID_CREDENTIALS",
+          code: "WRONG_PASSWORD",
         })
       );
     });

@@ -8,6 +8,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { ApiError } from "@/lib/api-client";
 import { Seo } from "@/components/Seo";
 
 const SignIn = () => {
@@ -16,6 +17,7 @@ const SignIn = () => {
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState<string | undefined>();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -33,6 +35,7 @@ const SignIn = () => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setError("");
+    setErrorCode(undefined);
   };
 
   const validateForm = () => {
@@ -70,7 +73,9 @@ const SignIn = () => {
       navigate("/dashboard");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sign in failed";
+      const code = err instanceof ApiError ? err.code : undefined;
       setError(message);
+      setErrorCode(code);
       toast({
         title: "Error",
         description: message,
@@ -105,9 +110,26 @@ const SignIn = () => {
 
             {/* Error Alert */}
             {error && (
-              <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
-                <AlertCircle size={16} />
-                <span>{error}</span>
+              <div className="flex flex-col gap-1 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
+                <div className="flex items-center gap-2">
+                  <AlertCircle size={16} className="shrink-0" />
+                  <span>{error}</span>
+                </div>
+                {errorCode === "EMAIL_NOT_FOUND" && (
+                  <p className="pl-6 text-xs text-muted-foreground">
+                    Don&apos;t have an account?{" "}
+                    <Link to="/sign-up" className="text-primary hover:underline font-medium">
+                      Sign up for free
+                    </Link>
+                  </p>
+                )}
+                {errorCode === "WRONG_PASSWORD" && (
+                  <p className="pl-6 text-xs text-muted-foreground">
+                    <Link to="/forgot-password" className="text-primary hover:underline font-medium">
+                      Forgot your password?
+                    </Link>
+                  </p>
+                )}
               </div>
             )}
 

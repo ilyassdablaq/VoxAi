@@ -97,16 +97,20 @@ export class AuthService {
     };
   }
 
+  // Constant-time dummy hash to prevent timing attacks when email is not found.
+  private static readonly DUMMY_HASH = "$2b$12$FixedDummySaltForTimingXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+
   async login(payload: LoginInput, context: AuthAttemptContext) {
     // 1. Rate-Limit-Vorabprüfung
     await authRateLimitService.assertNotLocked(context);
 
-    // 2. User suchen — bei Nichtfund trotzdem failure-counter setzen,
-    //    sonst gibt der Server eine Timing-side-channel preis (existing email).
+    // 2. User suchen — bei Nichtfund trotzdem bcrypt.compare ausführen,
+    //    damit Response-Zeit für "E-Mail nicht gefunden" nicht von "Falsches Passwort" unterscheidbar ist.
     const user = await this.repository.findUserByEmail(payload.email);
     if (!user) {
+      await bcrypt.compare(payload.password, AuthService.DUMMY_HASH);
       await authRateLimitService.recordFailure(context);
-      throw new AppError(401, "INVALID_CREDENTIALS", "Invalid email or password");
+      throw new AppError(401, "EMAIL_NOT_FOUND", "No account found with this email address.");
     }
 
     // 3. Lockout am DB-User (für persistente Sperren über Redis-Restart hinweg)
@@ -137,7 +141,7 @@ export class AuthService {
           .catch(() => undefined);
       }
 
-      throw new AppError(401, "INVALID_CREDENTIALS", "Invalid email or password");
+      throw new AppError(401, "WRONG_PASSWORD", "Incorrect password.");
     }
 
     // 4. Erfolg → Counter resetten + lastLogin tracken
