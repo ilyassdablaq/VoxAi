@@ -19,10 +19,9 @@ const PUBLIC_ROUTES = [
 
 const PROTECTED_ROUTES = [
   "/dashboard",
-  "/conversations",
-  "/analytics",
-  "/profile",
-  "/developer",
+  "/dashboard/analytics",
+  "/dashboard/profile",
+  "/dashboard/developer",
 ];
 
 test.describe("Public pages render", () => {
@@ -48,10 +47,10 @@ test.describe("Protected routes redirect unauthenticated users", () => {
   for (const path of PROTECTED_ROUTES) {
     test(`${path} redirects to sign-in when not logged in`, async ({ page }) => {
       await page.goto(path);
-      await page.waitForURL(/(sign-in|login|\/)/i, { timeout: 5000 }).catch(() => {});
+      // Wait specifically for /sign-in redirect — ProtectedRoute does an async auth check first
+      await page.waitForURL(/sign-in|login/i, { timeout: 5000 }).catch(() => {});
 
       const currentUrl = page.url();
-      // Either redirected to sign-in or the page shows a login prompt
       const isRedirected = /sign-in|login/.test(currentUrl);
       const hasLoginPrompt = await page
         .getByRole("button", { name: /sign in|log in/i })

@@ -97,16 +97,27 @@ export class AuthService {
     };
   }
 
+  // Lazily generated at first login attempt — avoids any hardcoded credential string.
+  private static timingDummyHash: string | null = null;
+
+  private static async getTimingDummyHash(): Promise<string> {
+    if (!AuthService.timingDummyHash) {
+      AuthService.timingDummyHash = await bcrypt.hash(randomBytes(16).toString("hex"), 12);
+    }
+    return AuthService.timingDummyHash;
+  }
+
   async login(payload: LoginInput, context: AuthAttemptContext) {
     // 1. Rate-Limit-Vorabprüfung
     await authRateLimitService.assertNotLocked(context);
 
-    // 2. User suchen — bei Nichtfund trotzdem failure-counter setzen,
-    //    sonst gibt der Server eine Timing-side-channel preis (existing email).
+    // 2. User suchen — bei Nichtfund trotzdem bcrypt.compare ausführen,
+    //    damit Response-Zeit für "E-Mail nicht gefunden" nicht von "Falsches Passwort" unterscheidbar ist.
     const user = await this.repository.findUserByEmail(payload.email);
     if (!user) {
+      await bcrypt.compare(payload.password, await AuthService.getTimingDummyHash());
       await authRateLimitService.recordFailure(context);
-      throw new AppError(401, "INVALID_CREDENTIALS", "Invalid email or password");
+      throw new AppError(401, "EMAIL_NOT_FOUND", "No account found with this email address.");
     }
 
     // 3. Lockout am DB-User (für persistente Sperren über Redis-Restart hinweg)
@@ -137,7 +148,7 @@ export class AuthService {
           .catch(() => undefined);
       }
 
-      throw new AppError(401, "INVALID_CREDENTIALS", "Invalid email or password");
+      throw new AppError(401, "WRONG_PASSWORD", "Incorrect password.");
     }
 
     // 4. Erfolg → Counter resetten + lastLogin tracken
