@@ -28,7 +28,7 @@ export class ApiError extends Error {
 
 type JsonBody = Record<string, unknown> | Array<unknown> | null;
 
-const API_REQUEST_TIMEOUT_MS = 1500;
+const API_REQUEST_TIMEOUT_MS = 30000;
 const PREFERRED_API_BASE_STORAGE_KEY = "preferredApiBase";
 
 let preferredApiBase: string | null = (() => {

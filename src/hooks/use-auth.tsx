@@ -62,62 +62,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    const loadProfileAndSubscription = async () => {
+      const profile = await authService.getCurrentUser();
+      if (!profile?.id) {
+        setUser(null);
+        setSubscription(null);
+        return;
+      }
+      setUser({
+        id: profile.id,
+        email: profile.email,
+        fullName: profile.fullName,
+        role: profile.role,
+      });
+      identifyUser(profile.id, {
+        email: profile.email,
+        role: profile.role,
+      });
+
+      try {
+        const sub = await subscriptionService.getCurrentSubscription();
+        setSubscription(sub);
+      } catch (error) {
+        console.error("Failed to fetch subscription:", error);
+      }
+    };
+
     const init = async () => {
       try {
         try {
-          const profile = await authService.getCurrentUser();
-          if (!profile?.id) {
-            setUser(null);
-            setSubscription(null);
-            return;
-          }
-          setUser({
-            id: profile.id,
-            email: profile.email,
-            fullName: profile.fullName,
-            role: profile.role,
-          });
-          identifyUser(profile.id, {
-            email: profile.email,
-            role: profile.role,
-          });
-
-          try {
-            const sub = await subscriptionService.getCurrentSubscription();
-            setSubscription(sub);
-          } catch (error) {
-            console.error("Failed to fetch subscription:", error);
-          }
-          return;
+          await loadProfileAndSubscription();
         } catch (error) {
           if (!isAuthenticationFailure(error)) {
             throw error;
           }
-
           await authService.refreshTokens();
-          const profile = await authService.getCurrentUser();
-          if (!profile?.id) {
-            setUser(null);
-            setSubscription(null);
-            return;
-          }
-          setUser({
-            id: profile.id,
-            email: profile.email,
-            fullName: profile.fullName,
-            role: profile.role,
-          });
-          identifyUser(profile.id, {
-            email: profile.email,
-            role: profile.role,
-          });
-
-          try {
-            const sub = await subscriptionService.getCurrentSubscription();
-            setSubscription(sub);
-          } catch (subscriptionError) {
-            console.error("Failed to fetch subscription:", subscriptionError);
-          }
+          await loadProfileAndSubscription();
         }
       } catch (error) {
         console.error("Auth initialization failed:", error);
@@ -135,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string, rememberMe = true) => {
     setIsLoading(true);
     try {
-      const response = await authService.login(email, password);
+      const response = await authService.login(email, password, rememberMe);
       setUser(response.user);
       identifyUser(response.user.id, {
         email: response.user.email,
