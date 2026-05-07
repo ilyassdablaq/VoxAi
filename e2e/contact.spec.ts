@@ -20,14 +20,14 @@ test.describe("Contact page", () => {
 
   test("shows validation error when submitting empty form", async ({ page }) => {
     await page.getByRole("button", { name: /send|submit|contact/i }).click();
-    await page.waitForTimeout(500);
 
-    // Either browser validation (invalid inputs) or app-level error messages
     const nameInput = page.locator('input[placeholder*="name" i], input[name*="name" i]').first();
     const isInvalid = await nameInput.evaluate((el: HTMLInputElement) => !el.validity.valid).catch(() => false);
-    const hasErrors = await page.locator('[role="alert"], .error, [data-error]').isVisible().catch(() => false);
 
-    expect(isInvalid || hasErrors).toBe(true);
+    if (!isInvalid) {
+      // App shows a shadcn toast — use expect() so Playwright waits for React to render it
+      await expect(page.getByText(/required fields|fill in all/i).first()).toBeVisible({ timeout: 3000 });
+    }
   });
 
   test("accepts valid form input without crashing", async ({ page }) => {

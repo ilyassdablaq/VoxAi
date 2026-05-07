@@ -45,10 +45,11 @@ test.describe("Sign In page", () => {
 
   test("shows validation error for empty submit", async ({ page }) => {
     await page.getByRole("button", { name: /sign in|log in|continue/i }).click();
-    // Either HTML5 validation or an error message
+    await page.waitForTimeout(500);
+    // Either HTML5 validation or an error message (app uses .text-destructive, not role=alert)
     const emailInput = page.locator('input[type="email"], input[placeholder*="email" i]');
     const isInvalid = await emailInput.evaluate((el: HTMLInputElement) => !el.validity.valid);
-    const hasErrorText = await page.locator('[role="alert"], .error, [data-error]').isVisible().catch(() => false);
+    const hasErrorText = await page.locator('[role="alert"], .error, [data-error], .text-destructive').isVisible().catch(() => false);
     expect(isInvalid || hasErrorText).toBe(true);
   });
 
@@ -80,7 +81,8 @@ test.describe("Sign Up page", () => {
   });
 
   test("has link back to sign-in", async ({ page }) => {
-    const link = page.getByRole("link", { name: /sign in|log in|already have/i });
+    // Scope to main content to avoid matching the navbar "Sign In" link
+    const link = page.locator("main, form, .glass").getByRole("link", { name: /sign in|log in|already have/i }).first();
     await expect(link).toBeVisible();
     await link.click();
     await expect(page).toHaveURL(/sign-in|login/i);
@@ -107,7 +109,8 @@ test.describe("Forgot Password page", () => {
 
   test("has link back to sign-in", async ({ page }) => {
     await page.goto("/forgot-password");
-    const link = page.getByRole("link", { name: /sign in|back|log in/i });
+    // Scope to main content to avoid matching the navbar "Sign In" link
+    const link = page.locator("main, form, .glass").getByRole("link", { name: /sign in|back|log in/i }).first();
     await expect(link).toBeVisible();
   });
 
