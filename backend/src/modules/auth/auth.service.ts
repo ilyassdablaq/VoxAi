@@ -97,8 +97,15 @@ export class AuthService {
     };
   }
 
-  // Constant-time dummy hash to prevent timing attacks when email is not found.
-  private static readonly DUMMY_HASH = "$2b$12$FixedDummySaltForTimingXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+  // Lazily generated at first login attempt — avoids any hardcoded credential string.
+  private static timingDummyHash: string | null = null;
+
+  private static async getTimingDummyHash(): Promise<string> {
+    if (!AuthService.timingDummyHash) {
+      AuthService.timingDummyHash = await bcrypt.hash(randomBytes(16).toString("hex"), 12);
+    }
+    return AuthService.timingDummyHash;
+  }
 
   async login(payload: LoginInput, context: AuthAttemptContext) {
     // 1. Rate-Limit-Vorabprüfung
@@ -108,7 +115,7 @@ export class AuthService {
     //    damit Response-Zeit für "E-Mail nicht gefunden" nicht von "Falsches Passwort" unterscheidbar ist.
     const user = await this.repository.findUserByEmail(payload.email);
     if (!user) {
-      await bcrypt.compare(payload.password, AuthService.DUMMY_HASH);
+      await bcrypt.compare(payload.password, await AuthService.getTimingDummyHash());
       await authRateLimitService.recordFailure(context);
       throw new AppError(401, "EMAIL_NOT_FOUND", "No account found with this email address.");
     }
