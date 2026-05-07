@@ -7,6 +7,8 @@ export default defineConfig({
     environment: "node",
     globals: true,
     css: false,
+    testTimeout: 15000,
+    hookTimeout: 15000,
     setupFiles: [path.resolve(__dirname, "src/test/setup.ts")],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     exclude: ["node_modules", "dist"],

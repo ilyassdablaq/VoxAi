@@ -74,9 +74,9 @@ async function performAuthFetch(path: string, init: RequestInit): Promise<Respon
       }
 
       return await fetch(`${baseUrl}${path}`, {
+        ...init,
         credentials: "include",
         headers,
-        ...init,
       });
     } catch (error) {
       lastError = error;
@@ -159,7 +159,7 @@ export const authService = {
     return payload;
   },
 
-  async login(email: string, password: string): Promise<AuthResponse> {
+  async login(email: string, password: string, persist = true): Promise<AuthResponse> {
     const response = await performAuthFetch(`/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -169,7 +169,7 @@ export const authService = {
     if (!response.ok) throw await parseAuthError(response, "Login failed");
 
     const payload = (await response.json()) as AuthResponse;
-    authService.setTokens(payload.accessToken, payload.refreshToken, true);
+    authService.setTokens(payload.accessToken, payload.refreshToken, persist);
     trackEvent("user_logged_in", {
       method: "password",
       role: payload.user.role,

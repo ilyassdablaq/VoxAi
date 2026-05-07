@@ -1,1 +1,0 @@
-{"error":{"code":"TOKEN_ISSUE_FAILED","message":"Refresh token signer is not configured"}}
