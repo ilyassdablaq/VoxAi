@@ -8,6 +8,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { onboardingState } from "@/hooks/use-onboarding";
 import { Seo } from "@/components/Seo";
 
 const SignUp = () => {
@@ -64,6 +65,7 @@ const SignUp = () => {
     setLoading(true);
     try {
       await register(formData.email, formData.password, formData.fullName);
+      onboardingState.markNewUser();
       toast({
         title: "Success",
         description: "Account created successfully!",

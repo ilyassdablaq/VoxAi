@@ -178,9 +178,11 @@ export const authService = {
   },
 
   async refreshTokens(): Promise<{ accessToken: string; refreshToken: string }> {
+    const storedRefreshToken = authService.getRefreshToken();
     const response = await performAuthFetch(`/api/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: storedRefreshToken ? JSON.stringify({ refreshToken: storedRefreshToken }) : undefined,
     });
 
     if (!response.ok) throw await parseAuthError(response, "Token refresh failed");

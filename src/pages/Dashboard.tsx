@@ -9,6 +9,9 @@ import { Plus, Mic, Loader2, Pencil, Trash2, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { conversationService, ConversationSummary } from "@/services/conversation.service";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
+import { DashboardTour } from "@/components/onboarding/DashboardTour";
+import { onboardingState } from "@/hooks/use-onboarding";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +26,8 @@ import {
 const Dashboard = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [showWizard, setShowWizard] = useState(() => onboardingState.isWizardPending());
+  const [showTour, setShowTour] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [newTitle, setNewTitle] = useState("");
@@ -147,6 +152,18 @@ const Dashboard = () => {
   };
 
   return (
+    <>
+    {showWizard && (
+      <OnboardingWizard
+        onDone={() => {
+          setShowWizard(false);
+          if (onboardingState.isTourPending()) setShowTour(true);
+        }}
+      />
+    )}
+    {showTour && !showWizard && (
+      <DashboardTour onDone={() => setShowTour(false)} />
+    )}
     <DashboardShell title="Conversations" description="Manage your AI conversations and continue where you left off.">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -331,6 +348,7 @@ const Dashboard = () => {
         </AlertDialogContent>
       </AlertDialog>
     </DashboardShell>
+    </>
   );
 };
 

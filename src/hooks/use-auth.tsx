@@ -101,7 +101,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error("Auth initialization failed:", error);
-        authService.clearTokens();
+        if (isAuthenticationFailure(error)) {
+          authService.clearTokens();
+        }
         setUser(null);
         setSubscription(null);
       } finally {
