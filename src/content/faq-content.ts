@@ -5,11 +5,11 @@ import {
   Cable,
   CreditCard,
   Database,
+  LifeBuoy,
   MessageCircle,
   Mic,
   Settings2,
   ShieldCheck,
-  Workflow,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -42,7 +42,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
         id: "what-users-can-do",
         question: "What can users do with it?",
         answer:
-          "You can create conversations, train your bot with business data, automate support workflows, track performance metrics, configure voice behavior, and connect your chatbot to websites or external tools.",
+          "You can create conversations, train your bot with business data, file IT support tickets, track performance metrics, configure voice behavior, and connect your chatbot to websites or external tools.",
       },
       {
         id: "who-is-it-for",
@@ -122,21 +122,27 @@ export const FAQ_SECTIONS: FaqSection[] = [
     ],
   },
   {
-    id: "workflows",
-    title: "Workflow Automation",
-    icon: Workflow,
+    id: "support",
+    title: "IT Support & Tickets",
+    icon: LifeBuoy,
     items: [
       {
-        id: "what-are-workflows",
-        question: "What are workflows?",
+        id: "what-is-it-support",
+        question: "What is IT Support?",
         answer:
-          "Workflows are trigger-and-action automations. A trigger starts the workflow, then one or more actions run automatically.",
+          "IT Support is a ticketing area inside your dashboard. Customers describe a problem or complaint and a structured support ticket is created with category, priority, and status.",
       },
       {
-        id: "workflow-use-cases",
-        question: "What are common workflow use cases?",
+        id: "how-to-file-ticket",
+        question: "How do I file a complaint or ticket?",
         answer:
-          "Examples include auto-creating support tickets, escalating high-priority conversations, sending follow-up messages, and syncing conversation data to CRM pipelines.",
+          "Open Dashboard → IT Support, fill in the subject and description, pick a category (technical, billing, integration, etc.) and a priority, then submit. The ticket appears in your active list until it is resolved.",
+      },
+      {
+        id: "ticket-statuses",
+        question: "What ticket statuses exist?",
+        answer:
+          "Tickets move through Open, In Progress, Resolved, and Closed. You can close a ticket yourself once your issue is solved, or delete resolved tickets from the history.",
       },
     ],
   },

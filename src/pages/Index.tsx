@@ -98,7 +98,7 @@ const homeStructuredData = {
       operatingSystem: "Web",
       url: "https://voxflow-ai-site.vercel.app/",
       description:
-        "AI voice chatbot platform for support, sales, and workflow automation.",
+        "AI voice chatbot platform for customer support, sales, and IT ticketing.",
       offers: [
         {
           "@type": "Offer",

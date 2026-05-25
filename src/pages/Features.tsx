@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Mic, Brain, Globe, Code2, BarChart3, Shield, Headphones, Workflow } from "lucide-react";
+import { Mic, Brain, Globe, Code2, BarChart3, Shield, Headphones, LifeBuoy } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SectionHeading from "@/components/SectionHeading";
@@ -13,7 +13,7 @@ const features = [
   { icon: Code2, title: "API & SDK Integration", desc: "RESTful API, WebSocket streaming, and SDKs for JavaScript, Python, and more. Integrate in minutes." },
   { icon: BarChart3, title: "Analytics Dashboard", desc: "Track conversation metrics, resolution rates, sentiment trends, and agent performance in real-time." },
   { icon: Shield, title: "Enterprise Security", desc: "SOC 2 Type II compliant, end-to-end encryption, GDPR ready, with configurable data residency." },
-  { icon: Workflow, title: "Workflow Automation", desc: "Connect to your CRM, helpdesk, and business tools. Automate ticket creation, escalation, and follow-ups." },
+  { icon: LifeBuoy, title: "IT Support & Ticketing", desc: "Customers report issues and complaints directly from the dashboard. Each request is captured as a prioritized support ticket your team can track and resolve." },
 ];
 
 const fadeUp = {

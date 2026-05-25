@@ -7,9 +7,9 @@ import {
   CircleHelp,
   CreditCard,
   Database,
-  GitBranch,
   KeyRound,
   LayoutDashboard,
+  LifeBuoy,
   Link as LinkIcon,
   LucideIcon,
   LogOut,
@@ -114,7 +114,7 @@ export function DashboardShell({ title, description, children }: DashboardShellP
   ];
 
   const advancedItems: MenuItemConfig[] = [
-    { to: "/dashboard/workflows", label: "Workflows", icon: GitBranch },
+    { to: "/dashboard/support", label: "IT Support", icon: LifeBuoy },
     { to: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
     { to: "/dashboard/voice", label: "Voice Controls", icon: Bot },
   ];

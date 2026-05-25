@@ -24,7 +24,7 @@ const DataSources = lazy(() => import("./pages/DataSources"));
 const ConversationChat = lazy(() => import("./pages/ConversationChat"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 const Integrations = lazy(() => import("./pages/Integrations"));
-const Workflows = lazy(() => import("./pages/Workflows"));
+const Support = lazy(() => import("./pages/Support"));
 const AnalyticsDashboard = lazy(() => import("./pages/AnalyticsDashboard"));
 const VoiceSettings = lazy(() => import("./pages/VoiceSettings"));
 const DeveloperPortal = lazy(() => import("./pages/DeveloperPortal"));
@@ -101,12 +101,10 @@ const App = () => (
                 }
               />
               <Route
-                path="/dashboard/workflows"
+                path="/dashboard/support"
                 element={
                   <ProtectedRoute>
-                    <ProFeatureRoute featureName="workflows" requiredPlan="PRO">
-                      <Workflows />
-                    </ProFeatureRoute>
+                    <Support />
                   </ProtectedRoute>
                 }
               />

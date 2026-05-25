@@ -10,11 +10,6 @@ export type PlanType = typeof PLAN_TYPES[keyof typeof PLAN_TYPES];
  * Feature gating: which features require which plan minimum
  */
 export const REQUIRED_PLAN_FOR_FEATURE: Record<string, PlanType> = {
-  'workflows': PLAN_TYPES.FREE,
-  'workflow_create': PLAN_TYPES.FREE,
-  'workflow_update': PLAN_TYPES.FREE,
-  'workflow_delete': PLAN_TYPES.FREE,
-  'workflow_execute': PLAN_TYPES.FREE,
   'analytics': PLAN_TYPES.FREE,
   'analytics_dashboard': PLAN_TYPES.FREE,
 };

@@ -7,9 +7,6 @@ export function useFeatureAccess() {
   const { subscription, user } = useAuth();
 
   const FEATURE_PLAN_MAP: Record<string, 'FREE' | 'PRO' | 'ENTERPRISE'> = {
-    'workflows': 'FREE',
-    'workflow_create': 'FREE',
-    'workflow_execute': 'FREE',
     'analytics': 'FREE',
     'analytics_dashboard': 'FREE',
   };

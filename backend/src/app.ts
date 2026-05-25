@@ -14,7 +14,7 @@ import { planRoutes } from "./modules/plan/plan.routes.js";
 import { conversationRoutes } from "./modules/conversation/conversation.routes.js";
 import { integrationRoutes } from "./modules/integration/integration.routes.js";
 import { knowledgeRoutes } from "./modules/knowledge/knowledge.routes.js";
-import { workflowRoutes } from "./modules/workflow/workflow.routes.js";
+import { ticketRoutes } from "./modules/ticket/ticket.routes.js";
 import { analyticsRoutes } from "./modules/analytics/analytics.routes.js";
 import { subscriptionRoutes } from "./modules/subscription/subscription.routes.js";
 import { userRoutes } from "./modules/user/user.routes.js";
@@ -92,7 +92,7 @@ export async function buildApp() {
       plans: "/api/plans",
       conversations: "/api/conversations",
       contact: "/api/contact",
-      workflows: "/api/workflows",
+      tickets: "/api/tickets",
       analytics: "/api/analytics/dashboard",
       users: "/api/users/me",
       voice: "/api/voice/settings",
@@ -161,7 +161,7 @@ export async function buildApp() {
   await app.register(conversationRoutes);
   await app.register(integrationRoutes);
   await app.register(knowledgeRoutes);
-  await app.register(workflowRoutes);
+  await app.register(ticketRoutes);
   await app.register(analyticsRoutes);
   await app.register(subscriptionRoutes);
   await app.register(userRoutes);

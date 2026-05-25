@@ -45,7 +45,7 @@ export function FaqContent({ searchLabel = "Search in documentation" }: FaqConte
           />
         </div>
         <p className="text-xs text-muted-foreground mt-2">
-          Tip: Search terms like "API", "voice", "subscription", or "workflow".
+          Tip: Search terms like "API", "voice", "subscription", or "ticket".
         </p>
       </div>
 
