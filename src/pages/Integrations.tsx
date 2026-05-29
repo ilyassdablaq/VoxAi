@@ -102,6 +102,7 @@ export default function Integrations() {
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [consentRequired, setConsentRequired] = useState(true);
   const [privacyPolicyUrl, setPrivacyPolicyUrl] = useState("");
+  const [supportEnabled, setSupportEnabled] = useState(false);
 
   const loadingStyle = useMemo(() => {
     if (subscription?.effectivePlan === "ENTERPRISE") {
@@ -136,6 +137,7 @@ export default function Integrations() {
     setMicrophoneEnabled(Boolean(data.microphoneEnabled));
     setConsentRequired(data.consentRequired ?? true);
     setPrivacyPolicyUrl(typeof data.privacyPolicyUrl === "string" ? data.privacyPolicyUrl.trim() : "");
+    setSupportEnabled(Boolean((data as Record<string, unknown>).supportEnabled));
   }, [data]);
 
   const effectiveData = useMemo(() => {
@@ -250,7 +252,7 @@ export default function Integrations() {
 
     const scriptHost = "https://voxflow-ai-site.vercel.app";
 
-    return `<script src="${scriptHost}/chatbot.js" data-embed-key="${escapeHtmlAttribute(effectiveData.embedKey)}" data-api-base="${escapeHtmlAttribute(API_BASE)}" data-theme="${escapeHtmlAttribute(effectiveData.themeColor)}" data-theme-mode="${escapeHtmlAttribute(effectiveData.themeMode)}" data-position="${escapeHtmlAttribute(effectiveData.position)}" data-language="${escapeHtmlAttribute(effectiveData.language)}" data-bot-name="${escapeHtmlAttribute(effectiveData.botName)}" data-launcher-text="${escapeHtmlAttribute(effectiveData.launcherText)}" data-launcher-icon="${escapeHtmlAttribute(effectiveData.launcherIcon)}" data-initial-message="${escapeHtmlAttribute(effectiveData.initialBotMessage || DEFAULT_INITIAL_BOT_MESSAGE)}" data-max-session-questions="${effectiveData.maxSessionQuestions}" data-microphone-enabled="${String(effectiveData.microphoneEnabled)}" data-consent-required="${String(effectiveData.consentRequired)}" data-privacy-url="${escapeHtmlAttribute(effectiveData.privacyPolicyUrl || "")}" data-loading-style="${loadingStyle}"><\/script>`;
+    return `<script src="${scriptHost}/chatbot.js" data-embed-key="${escapeHtmlAttribute(effectiveData.embedKey)}" data-api-base="${escapeHtmlAttribute(API_BASE)}" data-theme="${escapeHtmlAttribute(effectiveData.themeColor)}" data-theme-mode="${escapeHtmlAttribute(effectiveData.themeMode)}" data-position="${escapeHtmlAttribute(effectiveData.position)}" data-language="${escapeHtmlAttribute(effectiveData.language)}" data-bot-name="${escapeHtmlAttribute(effectiveData.botName)}" data-launcher-text="${escapeHtmlAttribute(effectiveData.launcherText)}" data-launcher-icon="${escapeHtmlAttribute(effectiveData.launcherIcon)}" data-initial-message="${escapeHtmlAttribute(effectiveData.initialBotMessage || DEFAULT_INITIAL_BOT_MESSAGE)}" data-max-session-questions="${effectiveData.maxSessionQuestions}" data-microphone-enabled="${String(effectiveData.microphoneEnabled)}" data-consent-required="${String(effectiveData.consentRequired)}" data-privacy-url="${escapeHtmlAttribute(effectiveData.privacyPolicyUrl || "")}" data-loading-style="${loadingStyle}" data-support-enabled="${String(supportEnabled)}"><\/script>`;
   }, [effectiveData, loadingStyle]);
 
   const copySnippet = async () => {
@@ -486,6 +488,14 @@ export default function Integrations() {
               </div>
             </div>
 
+            <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Enable IT Support in Widget</label>
+                <p className="text-xs text-muted-foreground">Show a "Support" tab in the chat widget so visitors can submit a ticket without leaving your site.</p>
+              </div>
+              <Switch checked={supportEnabled} onCheckedChange={setSupportEnabled} aria-label="Enable IT Support tab" />
+            </div>
+
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !canSave} className="min-h-11">
                 {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -523,6 +533,7 @@ export default function Integrations() {
               consentRequired={effectiveData?.consentRequired ?? data.consentRequired ?? true}
               privacyPolicyUrl={effectiveData?.privacyPolicyUrl ?? data.privacyPolicyUrl ?? ""}
               themeMode={effectiveData?.themeMode ?? data.themeMode ?? "light"}
+              supportEnabled={supportEnabled}
               loadingStyle={loadingStyle}
             />
           </IntegrationPreviewBoundary>

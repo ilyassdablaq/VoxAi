@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AppError } from "../../common/errors/app-error.js";
-import { CreateTicketInput, UpdateTicketInput } from "./ticket.schemas.js";
+import { CreatePublicTicketInput, CreateTicketInput, UpdateTicketInput } from "./ticket.schemas.js";
 import { TicketRepository } from "./ticket.repository.js";
 
 export class TicketService {
@@ -43,5 +43,19 @@ export class TicketService {
     if (deletedRows === 0) {
       throw new AppError(404, "TICKET_NOT_FOUND", "Ticket not found");
     }
+  }
+
+  async createPublicTicket(ownerUserId: string, payload: CreatePublicTicketInput) {
+    return this.repository.create({
+      id: randomUUID(),
+      userId: ownerUserId,
+      subject: payload.subject,
+      description: payload.description,
+      category: payload.category,
+      priority: "MEDIUM",
+      source: "WIDGET",
+      visitorName: payload.visitorName,
+      visitorEmail: payload.visitorEmail,
+    });
   }
 }

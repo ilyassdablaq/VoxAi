@@ -32,6 +32,7 @@
   var consentRequired = (currentScript.getAttribute("data-consent-required") || "true").toLowerCase() !== "false";
   var privacyPolicyUrl = (currentScript.getAttribute("data-privacy-url") || "").trim();
   var loadingStyle = (currentScript.getAttribute("data-loading-style") || "free").toLowerCase();
+  var supportEnabled = (currentScript.getAttribute("data-support-enabled") || "false").toLowerCase() === "true";
   var maxSessionQuestions = Number.isFinite(maxSessionQuestionsValue) ? Math.max(1, maxSessionQuestionsValue) : 3;
   var side = position === "bottom-left" ? "left" : "right";
 
@@ -62,6 +63,27 @@
         sessionSavedSuffix: " Fragen in Conversations gespeichert.",
         timeoutMessage: "Die Anfrage hat zu lange gedauert. Bitte versuchen Sie es erneut.",
         genericErrorMessage: "Entschuldigung, ich konnte gerade nicht antworten. Bitte versuchen Sie es erneut.",
+        tabChat: "Chat",
+        tabSupport: "Support",
+        supportTitle: "Support-Ticket",
+        supportSubtitle: "Beschreibe dein Anliegen – wir melden uns schnellstmöglich.",
+        supportNameLabel: "Dein Name",
+        supportEmailLabel: "E-Mail-Adresse",
+        supportSubjectLabel: "Betreff",
+        supportMessageLabel: "Beschreibung",
+        supportCategoryLabel: "Kategorie",
+        supportSubmit: "Ticket absenden",
+        supportSuccess: "Ticket erstellt! Wir melden uns per E-Mail.",
+        supportError: "Fehler beim Absenden. Bitte versuche es erneut.",
+        supportSending: "Wird gesendet...",
+        categories: [
+          { value: "technical", label: "Technisches Problem" },
+          { value: "billing", label: "Abrechnung" },
+          { value: "account", label: "Account" },
+          { value: "voice_quality", label: "Sprachqualität" },
+          { value: "integration", label: "Integration" },
+          { value: "other", label: "Sonstiges" },
+        ],
       };
     }
 
@@ -81,6 +103,27 @@
         sessionSavedSuffix: " questions.",
         timeoutMessage: "La requete a expire. Veuillez reessayer.",
         genericErrorMessage: "Desole, je ne peux pas repondre pour le moment. Veuillez reessayer.",
+        tabChat: "Chat",
+        tabSupport: "Support",
+        supportTitle: "Ticket de support",
+        supportSubtitle: "Decrivez votre probleme et nous vous repondrons rapidement.",
+        supportNameLabel: "Votre nom",
+        supportEmailLabel: "Adresse e-mail",
+        supportSubjectLabel: "Sujet",
+        supportMessageLabel: "Description",
+        supportCategoryLabel: "Categorie",
+        supportSubmit: "Envoyer le ticket",
+        supportSuccess: "Ticket cree ! Nous vous repondrons par e-mail.",
+        supportError: "Erreur lors de l'envoi. Veuillez reessayer.",
+        supportSending: "Envoi en cours...",
+        categories: [
+          { value: "technical", label: "Probleme technique" },
+          { value: "billing", label: "Facturation" },
+          { value: "account", label: "Compte" },
+          { value: "voice_quality", label: "Qualite vocale" },
+          { value: "integration", label: "Integration" },
+          { value: "other", label: "Autre" },
+        ],
       };
     }
 
@@ -99,6 +142,27 @@
       sessionSavedSuffix: " questions.",
       timeoutMessage: "The request timed out. Please try again.",
       genericErrorMessage: "Sorry, I couldn't reply right now. Please try again.",
+      tabChat: "Chat",
+      tabSupport: "Support",
+      supportTitle: "Support Ticket",
+      supportSubtitle: "Describe your issue and we'll get back to you as soon as possible.",
+      supportNameLabel: "Your name",
+      supportEmailLabel: "Email address",
+      supportSubjectLabel: "Subject",
+      supportMessageLabel: "Description",
+      supportCategoryLabel: "Category",
+      supportSubmit: "Submit ticket",
+      supportSuccess: "Ticket created! We'll reply to your email shortly.",
+      supportError: "Failed to submit. Please try again.",
+      supportSending: "Sending...",
+      categories: [
+        { value: "technical", label: "Technical issue" },
+        { value: "billing", label: "Billing" },
+        { value: "account", label: "Account" },
+        { value: "voice_quality", label: "Voice quality" },
+        { value: "integration", label: "Integration" },
+        { value: "other", label: "Other" },
+      ],
     };
   }
 
@@ -157,6 +221,7 @@
   var styles = document.createElement("style");
   styles.textContent = "\n    :host, * { box-sizing: border-box; }\n    .shell { display: flex; flex-direction: column; align-items: end; gap: 12px; }\n    .panel {\n      display: none;\n      width: min(340px, calc(100vw - 32px));\n      height: min(520px, calc(100vh - 96px));\n      background: #f8fafc;\n      border: 1px solid rgba(148, 163, 184, 0.35);\n      border-radius: 22px;\n      box-shadow: 0 30px 60px rgba(15, 23, 42, 0.22);\n      overflow: hidden;\n      backdrop-filter: blur(18px);\n    }\n    .panel.open { display: flex; flex-direction: column; }\n    .header {\n      min-height: 56px;\n      padding: 0 16px;\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      background: linear-gradient(135deg, var(--theme), color-mix(in srgb, var(--theme) 72%, #ffffff 28%));\n      color: #fff;\n    }\n    .header-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }\n    .header-copy { display: flex; flex-direction: column; gap: 1px; }\n    .status-pill {\n      font-size: 11px;\n      font-weight: 600;\n      padding: 6px 10px;\n      border-radius: 999px;\n      background: rgba(255, 255, 255, 0.18);\n      border: 1px solid rgba(255, 255, 255, 0.18);\n      white-space: nowrap;\n      cursor: pointer;\n    }\n    .messages {\n      flex: 1;\n      overflow-y: auto;\n      padding: 14px;\n      display: flex;\n      flex-direction: column;\n      gap: 12px;\n      background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);\n    }\n    .row { display: flex; }\n    .row.user { justify-content: flex-end; }\n    .row.assistant { justify-content: flex-start; }\n    .bubble {\n      max-width: 82%;\n      padding: 11px 13px;\n      border-radius: 14px;\n      font-size: 13px;\n      line-height: 1.45;\n      white-space: pre-wrap;\n      word-break: break-word;\n      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);\n    }\n    .bubble.user {\n      color: #fff;\n      background: var(--theme);\n      border-bottom-right-radius: 6px;\n    }\n    .bubble.assistant {\n      color: #1e293b;\n      background: #e5e7eb;\n      border-bottom-left-radius: 6px;\n    }\n    .bubble.system {\n      color: #475569;\n      background: #eef2ff;\n      border: 1px solid rgba(99, 102, 241, 0.16);\n    }\n    .typing { display: inline-flex; align-items: center; gap: 4px; min-width: 44px; }\n    .dot { width: 6px; height: 6px; border-radius: 999px; background: #94a3b8; animation: bounce 1s infinite ease-in-out; }\n    .dot:nth-child(2) { animation-delay: 120ms; }\n    .dot:nth-child(3) { animation-delay: 240ms; }\n    @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.45; } 40% { transform: translateY(-4px); opacity: 1; } }\n    .composer {\n      border-top: 1px solid rgba(148, 163, 184, 0.22);\n      background: rgba(255, 255, 255, 0.92);\n      padding: 10px;\n      display: flex;\n      gap: 8px;\n      align-items: center;\n    }\n    .input {\n      flex: 1;\n      min-height: 42px;\n      border: 1px solid rgba(148, 163, 184, 0.45);\n      border-radius: 12px;\n      padding: 0 12px;\n      background: #fff;\n      color: #0f172a;\n      outline: none;\n      font-size: 14px;\n      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);\n    }\n    .input:focus { border-color: var(--theme); box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme) 20%, transparent); }\n    .send {\n      min-width: 64px;\n      min-height: 42px;\n      padding: 0 14px;\n      border: 0;\n      border-radius: 12px;\n      cursor: pointer;\n      color: #fff;\n      background: var(--theme);\n      font-weight: 700;\n      font-size: 14px;\n      box-shadow: 0 10px 24px color-mix(in srgb, var(--theme) 25%, transparent);\n    }\n    .send:disabled { opacity: 0.6; cursor: not-allowed; }\n    .consent {\n      display: none;\n      flex-direction: column;\n      gap: 14px;\n      padding: 16px;\n      border-top: 1px solid rgba(148, 163, 184, 0.22);\n      background: rgba(255, 255, 255, 0.96);\n    }\n    .consent-copy {\n      margin: 0;\n      color: #334155;\n      font-size: 12px;\n      line-height: 1.7;\n    }\n    .consent-copy a, .consent-copy .consent-link {\n      color: var(--theme);\n      font-weight: 700;\n      text-decoration: underline;\n      text-underline-offset: 3px;\n    }\n    .consent-action {\n      align-self: center;\n      min-height: 42px;\n      padding: 0 18px;\n      border: 0;\n      border-radius: 999px;\n      cursor: pointer;\n      color: #fff;\n      background: var(--theme);\n      font-weight: 700;\n      font-size: 14px;\n      box-shadow: 0 10px 24px color-mix(in srgb, var(--theme) 25%, transparent);\n    }\n    .launcher {\n      width: 56px;\n      height: 56px;\n      border-radius: 999px;\n      border: 0;\n      cursor: pointer;\n      color: #fff;\n      background: linear-gradient(135deg, var(--theme), color-mix(in srgb, var(--theme) 72%, #ffffff 28%));\n      box-shadow: 0 18px 30px rgba(15, 23, 42, 0.2);\n      display: inline-flex;\n      align-items: center;\n      justify-content: center;\n      font-weight: 700;\n      letter-spacing: 0.01em;\n    }\n    .launcher svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; }\n  ";
   styles.textContent += "\n    .typing-bubble { background: var(--loading-bg, #ffffff) !important; border: 1px solid var(--loading-border, #e2e8f0) !important; }\n    .typing-bubble .dot { background: var(--loading-dot, #94a3b8) !important; }\n  ";
+  styles.textContent += "\n    .tab-bar { display: flex; border-bottom: 1px solid rgba(148,163,184,0.22); background: var(--tab-bg, #f8fafc); }\n    .tab-btn { flex: 1; padding: 10px 8px; border: 0; background: transparent; font-size: 13px; font-weight: 600; cursor: pointer; color: #64748b; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }\n    .tab-btn.active { color: var(--theme); border-bottom-color: var(--theme); }\n    .support-panel { flex: 1; overflow-y: auto; padding: 14px; display: none; flex-direction: column; gap: 10px; }\n    .support-panel.visible { display: flex; }\n    .sup-label { font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 2px; }\n    .sup-input { width: 100%; min-height: 38px; border: 1px solid rgba(148,163,184,0.45); border-radius: 10px; padding: 0 10px; font-size: 13px; color: #0f172a; background: #fff; outline: none; box-sizing: border-box; }\n    .sup-input:focus { border-color: var(--theme); box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme) 20%, transparent); }\n    .sup-textarea { width: 100%; min-height: 80px; border: 1px solid rgba(148,163,184,0.45); border-radius: 10px; padding: 8px 10px; font-size: 13px; color: #0f172a; background: #fff; outline: none; resize: none; box-sizing: border-box; font-family: inherit; }\n    .sup-textarea:focus { border-color: var(--theme); box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme) 20%, transparent); }\n    .sup-select { width: 100%; min-height: 38px; border: 1px solid rgba(148,163,184,0.45); border-radius: 10px; padding: 0 10px; font-size: 13px; color: #0f172a; background: #fff; outline: none; box-sizing: border-box; }\n    .sup-select:focus { border-color: var(--theme); }\n    .sup-submit { width: 100%; min-height: 42px; border: 0; border-radius: 12px; background: var(--theme); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 4px; }\n    .sup-submit:disabled { opacity: 0.6; cursor: not-allowed; }\n    .sup-success { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px; font-size: 13px; color: #166534; text-align: center; }\n    .sup-error { background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 12px; font-size: 13px; color: #991b1b; text-align: center; }\n    .sup-subtitle { font-size: 12px; color: #64748b; margin: 0; }\n  ";
   styles.textContent += "\n    .voice {\n      width: 36px;\n      height: 36px;\n      border: 1px solid transparent;\n      border-radius: 12px;\n      cursor: pointer;\n      color: #fff;\n      background: var(--theme);\n      display: inline-flex;\n      align-items: center;\n      justify-content: center;\n      box-shadow: none;\n      flex-shrink: 0;\n    }\n    .voice svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }\n  ";
 
   var shell = document.createElement("div");
@@ -273,12 +338,131 @@
   composer.appendChild(input);
   composer.appendChild(send);
 
+  // Tab bar (only when supportEnabled)
+  var tabBar = null;
+  var tabChatBtn = null;
+  var tabSupportBtn = null;
+  var supportPanel = null;
+  var activeTab = "chat";
+
+  if (supportEnabled) {
+    tabBar = document.createElement("div");
+    tabBar.className = "tab-bar";
+    if (themeMode === "dark") {
+      tabBar.style.setProperty("--tab-bg", "#0f172a");
+      tabBar.style.borderBottomColor = "rgba(71,85,105,0.52)";
+    }
+
+    tabChatBtn = document.createElement("button");
+    tabChatBtn.type = "button";
+    tabChatBtn.className = "tab-btn active";
+    tabChatBtn.innerText = localizedCopy.tabChat || "Chat";
+
+    tabSupportBtn = document.createElement("button");
+    tabSupportBtn.type = "button";
+    tabSupportBtn.className = "tab-btn";
+    tabSupportBtn.innerText = localizedCopy.tabSupport || "Support";
+
+    tabBar.appendChild(tabChatBtn);
+    tabBar.appendChild(tabSupportBtn);
+
+    // Support form panel
+    supportPanel = document.createElement("div");
+    supportPanel.className = "support-panel";
+    if (themeMode === "dark") {
+      supportPanel.style.background = "linear-gradient(180deg, #0f172a 0%, #020617 100%)";
+    }
+
+    var supSubtitle = document.createElement("p");
+    supSubtitle.className = "sup-subtitle";
+    supSubtitle.innerText = localizedCopy.supportSubtitle || "";
+
+    var supNameLabel = document.createElement("div");
+    supNameLabel.className = "sup-label";
+    supNameLabel.innerText = localizedCopy.supportNameLabel || "Name";
+    var supNameInput = document.createElement("input");
+    supNameInput.className = "sup-input";
+    supNameInput.type = "text";
+    supNameInput.maxLength = 100;
+    supNameInput.autocomplete = "name";
+    if (themeMode === "dark") { supNameInput.style.background = "#1e293b"; supNameInput.style.color = "#e2e8f0"; supNameInput.style.borderColor = "rgba(100,116,139,0.72)"; }
+
+    var supEmailLabel = document.createElement("div");
+    supEmailLabel.className = "sup-label";
+    supEmailLabel.innerText = localizedCopy.supportEmailLabel || "Email";
+    var supEmailInput = document.createElement("input");
+    supEmailInput.className = "sup-input";
+    supEmailInput.type = "email";
+    supEmailInput.maxLength = 200;
+    supEmailInput.autocomplete = "email";
+    if (themeMode === "dark") { supEmailInput.style.background = "#1e293b"; supEmailInput.style.color = "#e2e8f0"; supEmailInput.style.borderColor = "rgba(100,116,139,0.72)"; }
+
+    var supSubjectLabel = document.createElement("div");
+    supSubjectLabel.className = "sup-label";
+    supSubjectLabel.innerText = localizedCopy.supportSubjectLabel || "Subject";
+    var supSubjectInput = document.createElement("input");
+    supSubjectInput.className = "sup-input";
+    supSubjectInput.type = "text";
+    supSubjectInput.maxLength = 140;
+    if (themeMode === "dark") { supSubjectInput.style.background = "#1e293b"; supSubjectInput.style.color = "#e2e8f0"; supSubjectInput.style.borderColor = "rgba(100,116,139,0.72)"; }
+
+    var supCategoryLabel = document.createElement("div");
+    supCategoryLabel.className = "sup-label";
+    supCategoryLabel.innerText = localizedCopy.supportCategoryLabel || "Category";
+    var supCategorySelect = document.createElement("select");
+    supCategorySelect.className = "sup-select";
+    if (themeMode === "dark") { supCategorySelect.style.background = "#1e293b"; supCategorySelect.style.color = "#e2e8f0"; supCategorySelect.style.borderColor = "rgba(100,116,139,0.72)"; }
+    (localizedCopy.categories || []).forEach(function(cat) {
+      var opt = document.createElement("option");
+      opt.value = cat.value;
+      opt.innerText = cat.label;
+      supCategorySelect.appendChild(opt);
+    });
+
+    var supMsgLabel = document.createElement("div");
+    supMsgLabel.className = "sup-label";
+    supMsgLabel.innerText = localizedCopy.supportMessageLabel || "Description";
+    var supMsgTextarea = document.createElement("textarea");
+    supMsgTextarea.className = "sup-textarea";
+    supMsgTextarea.maxLength = 4000;
+    supMsgTextarea.rows = 4;
+    if (themeMode === "dark") { supMsgTextarea.style.background = "#1e293b"; supMsgTextarea.style.color = "#e2e8f0"; supMsgTextarea.style.borderColor = "rgba(100,116,139,0.72)"; }
+
+    var supSubmitBtn = document.createElement("button");
+    supSubmitBtn.type = "button";
+    supSubmitBtn.className = "sup-submit";
+    supSubmitBtn.innerText = localizedCopy.supportSubmit || "Submit ticket";
+
+    var supFeedback = document.createElement("div");
+    supFeedback.style.display = "none";
+
+    supportPanel.appendChild(supSubtitle);
+    supportPanel.appendChild(supNameLabel);
+    supportPanel.appendChild(supNameInput);
+    supportPanel.appendChild(supEmailLabel);
+    supportPanel.appendChild(supEmailInput);
+    supportPanel.appendChild(supSubjectLabel);
+    supportPanel.appendChild(supSubjectInput);
+    supportPanel.appendChild(supCategoryLabel);
+    supportPanel.appendChild(supCategorySelect);
+    supportPanel.appendChild(supMsgLabel);
+    supportPanel.appendChild(supMsgTextarea);
+    supportPanel.appendChild(supSubmitBtn);
+    supportPanel.appendChild(supFeedback);
+  }
+
   panel.appendChild(header);
+  if (tabBar) {
+    panel.appendChild(tabBar);
+  }
   panel.appendChild(messages);
   if (consentPanel) {
     panel.appendChild(consentPanel);
   }
   panel.appendChild(composer);
+  if (supportPanel) {
+    panel.appendChild(supportPanel);
+  }
 
   var launcher = document.createElement("button");
   launcher.className = "launcher";
@@ -726,5 +910,89 @@
     createBubble("ASSISTANT", message);
   });
   updateComposerAvailability();
+
+  function switchTab(tab) {
+    if (!supportEnabled) return;
+    activeTab = tab;
+    if (tab === "chat") {
+      tabChatBtn.className = "tab-btn active";
+      tabSupportBtn.className = "tab-btn";
+      messages.style.display = "flex";
+      composer.style.display = "";
+      if (consentPanel) consentPanel.style.display = (consentRequired && !consentAccepted) ? "flex" : "none";
+      supportPanel.className = "support-panel";
+    } else {
+      tabChatBtn.className = "tab-btn";
+      tabSupportBtn.className = "tab-btn active";
+      messages.style.display = "none";
+      composer.style.display = "none";
+      if (consentPanel) consentPanel.style.display = "none";
+      supportPanel.className = "support-panel visible";
+    }
+  }
+
+  if (tabChatBtn) {
+    tabChatBtn.addEventListener("click", function () { switchTab("chat"); });
+  }
+  if (tabSupportBtn) {
+    tabSupportBtn.addEventListener("click", function () { switchTab("support"); });
+  }
+
+  if (supSubmitBtn) {
+    supSubmitBtn.addEventListener("click", async function () {
+      var name = supNameInput.value.trim();
+      var email = supEmailInput.value.trim();
+      var subject = supSubjectInput.value.trim();
+      var category = supCategorySelect.value;
+      var description = supMsgTextarea.value.trim();
+
+      if (!name || !email || !subject || description.length < 10) {
+        supFeedback.className = "sup-error";
+        supFeedback.style.display = "block";
+        supFeedback.innerText = localizedCopy.supportError || "Please fill in all fields.";
+        return;
+      }
+
+      supSubmitBtn.disabled = true;
+      supSubmitBtn.innerText = localizedCopy.supportSending || "Sending...";
+      supFeedback.style.display = "none";
+
+      try {
+        var resp = await fetch(apiBase + "/api/tickets/public", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            embedKey: embedKey,
+            visitorName: name,
+            visitorEmail: email,
+            subject: subject,
+            description: description,
+            category: category,
+          }),
+        });
+
+        if (!resp.ok) {
+          throw new Error("Request failed");
+        }
+
+        supFeedback.className = "sup-success";
+        supFeedback.style.display = "block";
+        supFeedback.innerText = localizedCopy.supportSuccess || "Ticket submitted!";
+        supNameInput.value = "";
+        supEmailInput.value = "";
+        supSubjectInput.value = "";
+        supMsgTextarea.value = "";
+        supSubmitBtn.innerText = localizedCopy.supportSubmit || "Submit ticket";
+        supSubmitBtn.disabled = false;
+      } catch (_err) {
+        supFeedback.className = "sup-error";
+        supFeedback.style.display = "block";
+        supFeedback.innerText = localizedCopy.supportError || "Failed to submit. Please try again.";
+        supSubmitBtn.innerText = localizedCopy.supportSubmit || "Submit ticket";
+        supSubmitBtn.disabled = false;
+      }
+    });
+  }
+
   setOpen(false);
 })();

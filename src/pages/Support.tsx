@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Loader2, LifeBuoy, Send, Trash2, AlertTriangle, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, LifeBuoy, Send, Trash2, AlertTriangle, XCircle, Globe } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -149,8 +149,12 @@ export default function Support() {
   const formInvalid = subject.trim().length < 3 || description.trim().length < 10;
 
   const tickets: SupportTicket[] = ticketsQuery.data ?? [];
-  const openTickets = tickets.filter((t) => t.status === "OPEN" || t.status === "IN_PROGRESS");
-  const resolvedTickets = tickets.filter((t) => t.status === "RESOLVED" || t.status === "CLOSED");
+  const dashboardTickets = tickets.filter((t) => t.source !== "WIDGET");
+  const widgetTickets = tickets.filter((t) => t.source === "WIDGET");
+  const openTickets = dashboardTickets.filter((t) => t.status === "OPEN" || t.status === "IN_PROGRESS");
+  const resolvedTickets = dashboardTickets.filter((t) => t.status === "RESOLVED" || t.status === "CLOSED");
+  const openWidgetTickets = widgetTickets.filter((t) => t.status === "OPEN" || t.status === "IN_PROGRESS");
+  const resolvedWidgetTickets = widgetTickets.filter((t) => t.status === "RESOLVED" || t.status === "CLOSED");
 
   return (
     <DashboardShell
@@ -347,6 +351,93 @@ export default function Support() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Widget visitor tickets — full width row */}
+        <Card className="lg:col-span-5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="w-5 h-5 text-primary" />
+              Website-Besucher Tickets ({widgetTickets.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {ticketsQuery.isLoading ? (
+              <p className="text-sm text-muted-foreground">Lade Tickets...</p>
+            ) : widgetTickets.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Noch keine Tickets von Webseitenbesuchern. Aktiviere "IT Support" im Widget unter Integrations.
+              </p>
+            ) : (
+              <div className="space-y-3 max-h-[480px] overflow-auto pr-1">
+                {[...openWidgetTickets, ...resolvedWidgetTickets].map((ticket) => {
+                  const statusMeta = STATUS_META[ticket.status];
+                  const StatusIcon = statusMeta.icon;
+                  return (
+                    <div key={ticket.id} className="rounded-md border border-border p-4 space-y-2">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold truncate">{ticket.subject}</p>
+                            <span
+                              className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium ${statusMeta.className}`}
+                            >
+                              <StatusIcon className="w-3 h-3" />
+                              {statusMeta.label}
+                            </span>
+                            <span
+                              className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium ${PRIORITY_BADGE[ticket.priority]}`}
+                            >
+                              {PRIORITIES.find((p) => p.value === ticket.priority)?.label ?? ticket.priority}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 mt-1">
+                            {ticket.visitorName ? (
+                              <span className="text-xs text-muted-foreground font-medium">{ticket.visitorName}</span>
+                            ) : null}
+                            {ticket.visitorEmail ? (
+                              <a
+                                href={`mailto:${ticket.visitorEmail}`}
+                                className="text-xs text-primary hover:underline"
+                              >
+                                {ticket.visitorEmail}
+                              </a>
+                            ) : null}
+                            <span className="text-[11px] text-muted-foreground">
+                              {categoryLabel(ticket.category)} • {formatDate(ticket.createdAt)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          {(ticket.status === "OPEN" || ticket.status === "IN_PROGRESS") ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => closeMutation.mutate(ticket.id)}
+                              disabled={isBusy}
+                            >
+                              <CheckCircle2 className="w-4 h-4 mr-1" />
+                              Schließen
+                            </Button>
+                          ) : null}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => deleteMutation.mutate(ticket.id)}
+                            disabled={isBusy}
+                            title="Ticket löschen"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{ticket.description}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </DashboardShell>
   );

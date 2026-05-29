@@ -4,6 +4,8 @@ export type TicketCategory = "technical" | "billing" | "account" | "voice_qualit
 export type TicketPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 export type TicketStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
 
+export type TicketSource = "DASHBOARD" | "WIDGET";
+
 export interface SupportTicket {
   id: string;
   userId: string;
@@ -12,6 +14,9 @@ export interface SupportTicket {
   category: TicketCategory;
   priority: TicketPriority;
   status: TicketStatus;
+  source: TicketSource;
+  visitorName: string | null;
+  visitorEmail: string | null;
   createdAt: string;
   updatedAt: string;
 }

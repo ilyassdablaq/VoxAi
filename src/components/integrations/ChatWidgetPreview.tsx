@@ -14,6 +14,7 @@ interface ChatWidgetPreviewProps {
   microphoneEnabled: boolean;
   consentRequired: boolean;
   privacyPolicyUrl: string;
+  supportEnabled?: boolean;
   loadingStyle?: "free" | "pro" | "enterprise";
 }
 
@@ -117,6 +118,7 @@ export function ChatWidgetPreview({
   microphoneEnabled,
   consentRequired,
   privacyPolicyUrl,
+  supportEnabled = false,
   loadingStyle = "free",
 }: ChatWidgetPreviewProps) {
   const textTone = isLightColor(themeColor) ? "#0f172a" : "#ffffff";
@@ -194,6 +196,17 @@ export function ChatWidgetPreview({
               X
             </button>
           </div>
+
+          {supportEnabled ? (
+            <div className={cn("flex border-b", isDarkMode ? "bg-slate-900 border-slate-700/60" : "bg-slate-50 border-slate-200/60")}>
+              <button type="button" className={cn("flex-1 py-2.5 text-xs font-semibold border-b-2 transition-colors", isDarkMode ? "text-white border-current" : "border-current")} style={{ borderBottomColor: themeColor, color: themeColor }}>
+                Chat
+              </button>
+              <button type="button" className={cn("flex-1 py-2.5 text-xs font-semibold border-b-2 border-transparent", isDarkMode ? "text-slate-400" : "text-slate-400")}>
+                Support
+              </button>
+            </div>
+          ) : null}
 
           <div className={cn("flex flex-1 flex-col p-4", isDarkMode ? "bg-gradient-to-b from-slate-900 to-slate-950" : "bg-gradient-to-b from-slate-50 to-white")}>
             <div className="space-y-3">

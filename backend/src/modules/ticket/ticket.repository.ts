@@ -9,6 +9,9 @@ export type TicketRecord = {
   category: TicketCategory;
   priority: TicketPriority;
   status: TicketStatus;
+  source: "DASHBOARD" | "WIDGET";
+  visitorName: string | null;
+  visitorEmail: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -21,6 +24,9 @@ type TicketRow = {
   category: TicketCategory;
   priority: TicketPriority;
   status: TicketStatus;
+  source: "DASHBOARD" | "WIDGET";
+  visitor_name: string | null;
+  visitor_email: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -34,6 +40,9 @@ function mapRow(row: TicketRow): TicketRecord {
     category: row.category,
     priority: row.priority,
     status: row.status,
+    source: row.source ?? "DASHBOARD",
+    visitorName: row.visitor_name ?? null,
+    visitorEmail: row.visitor_email ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -56,9 +65,24 @@ export class TicketRepository {
         category TEXT NOT NULL DEFAULT 'technical',
         priority TEXT NOT NULL DEFAULT 'MEDIUM',
         status TEXT NOT NULL DEFAULT 'OPEN',
+        source TEXT NOT NULL DEFAULT 'DASHBOARD',
+        visitor_name TEXT,
+        visitor_email TEXT,
         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'DASHBOARD'
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS visitor_name TEXT
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS visitor_email TEXT
     `);
 
     await prisma.$executeRawUnsafe(`
@@ -74,7 +98,7 @@ export class TicketRepository {
 
     const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
       `
-      SELECT id, user_id, subject, description, category, priority, status, created_at, updated_at
+      SELECT id, user_id, subject, description, category, priority, status, source, visitor_name, visitor_email, created_at, updated_at
       FROM support_tickets
       WHERE user_id = $1
       ORDER BY created_at DESC
@@ -91,7 +115,7 @@ export class TicketRepository {
 
     const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
       `
-      SELECT id, user_id, subject, description, category, priority, status, created_at, updated_at
+      SELECT id, user_id, subject, description, category, priority, status, source, visitor_name, visitor_email, created_at, updated_at
       FROM support_tickets
       WHERE user_id = $1 AND id = $2
       LIMIT 1
@@ -111,13 +135,16 @@ export class TicketRepository {
     description: string;
     category: TicketCategory;
     priority: TicketPriority;
+    source?: "DASHBOARD" | "WIDGET";
+    visitorName?: string | null;
+    visitorEmail?: string | null;
   }): Promise<TicketRecord> {
     await this.ensureTables();
 
     await prisma.$executeRawUnsafe(
       `
-      INSERT INTO support_tickets (id, user_id, subject, description, category, priority, status, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, 'OPEN', NOW(), NOW())
+      INSERT INTO support_tickets (id, user_id, subject, description, category, priority, status, source, visitor_name, visitor_email, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, 'OPEN', $7, $8, $9, NOW(), NOW())
       `,
       input.id,
       input.userId,
@@ -125,6 +152,9 @@ export class TicketRepository {
       input.description,
       input.category,
       input.priority,
+      input.source ?? "DASHBOARD",
+      input.visitorName ?? null,
+      input.visitorEmail ?? null,
     );
 
     const created = await this.getById(input.userId, input.id);
