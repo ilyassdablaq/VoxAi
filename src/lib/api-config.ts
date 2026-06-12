@@ -1,4 +1,6 @@
-const DEFAULT_API_BASE = "http://localhost:4000";
+const DEFAULT_API_BASE = import.meta.env.PROD
+	? "https://voxai-production-1cd4.up.railway.app"
+	: "http://localhost:4000";
 
 function normalizeBaseUrl(baseUrl: string): string {
 	return baseUrl.replace(/\/+$/, "");
