@@ -341,6 +341,100 @@ RESEND_WEBHOOK_SECRET=whsec_xxx
 3. Save changes and trigger a redeploy/restart.
 4. Check logs for `Resend email client configured` and confirm the API key is only shown as a masked preview.
 
+### Railway Backend Deployment
+
+Railway ist eine einfache, kostenlose Alternative mit $5/Monat kostenlosen Credits. Kein Sleep, direkter Docker-Support, läuft 24/7.
+
+#### Schritt 1: Vorbereitung
+
+1. Registriere dich bei [Railway.app](https://railway.app).
+2. Erstelle ein neues **Project**.
+3. Stelle sicher, dass du eine externe PostgreSQL-Datenbank und Redis hast (z. B. Neon + Upstash) oder nutze Railway's Plugins.
+
+#### Schritt 2: Deploy von GitHub
+
+1. Gehe zu deinem Railway Project → **+ New** → **GitHub Repo**.
+2. Wähle dein Repository aus und bestätige.
+3. Railway findet automatisch `backend/docker/Dockerfile`.
+4. Im nächsten Fenster: Prüfe **Settings**:
+   - **Root Directory**: `backend/`
+   - **Dockerfile**: `docker/Dockerfile`
+   - **Port**: `8080`
+
+#### Schritt 3: Environment Variables
+
+1. Gehe zu deinem Service in Railway → **Variables**.
+2. Klicke **+ Add Variable** und füge folgende Variablen hinzu:
+
+```
+APP_ORIGIN=https://dein-frontend.de
+NODE_ENV=production
+PORT=8080
+HOST=0.0.0.0
+DATABASE_URL=postgresql://user:pass@host:5432/db
+REDIS_URL=rediss://default:pass@host:6379
+JWT_ACCESS_SECRET=<min-16-zeichen-geheim>
+JWT_REFRESH_SECRET=<min-16-zeichen-geheim>
+RESEND_API_KEY=<dein-resend-api-key>
+EMAIL_FROM=noreply@deine-domain.com
+CONTACT_RECEIVER_EMAIL=support@deine-domain.com
+QUEUE_WORKERS_ENABLED=false
+```
+
+3. Speichern → Railway deployt automatisch neu.
+
+#### Schritt 4: Prisma-Migration (einmalig)
+
+Nach dem ersten Deploy musst du Datenbank-Migrationen ausführen:
+
+**Via Railway Shell:**
+```bash
+railway shell
+npm run prisma:deploy
+exit
+```
+
+**Oder lokal (falls Remote-Shell nicht klappt):**
+```bash
+cd backend
+DATABASE_URL=<deine-live-db> npm run prisma:deploy
+```
+
+#### Schritt 5: Domain & Test
+
+1. Railway generiert automatisch eine URL (z. B. `https://voxflow-backend-production.up.railway.app`).
+2. Test: `curl https://voxflow-backend-production.up.railway.app/health`
+3. Im Frontend `.env` setzen:
+   ```
+   VITE_API_URL=https://voxflow-backend-production.up.railway.app
+   ```
+
+#### Datenbank-Setup
+
+**Option A: Railway Plugins** (einfachste)
+1. Project → **+ New** → **Database** → **PostgreSQL**
+2. Warte, bis die DB startet
+3. Railway linked automatisch `DATABASE_URL` in deine Variables
+4. Für Redis: **+ New** → **Database** → **Redis**
+
+**Option B: Externe Datenbanken** (kostenlos)
+- **PostgreSQL**: [Neon](https://neon.tech) (kostenlos)
+- **Redis**: [Upstash](https://upstash.com) (kostenlos)
+- Dann manuell `DATABASE_URL` + `REDIS_URL` setzen
+
+#### Kosten & Limits
+
+- **Kostenlose $5/Monat**: reicht für kleines Backend
+- **Kein Sleep**: läuft 24/7 ohne Inaktivität
+- Nach $5: ~$7-15/Monat je nach Last
+- Neon (kostenlos) + Upstash (kostenlos) = **$0 extra**
+
+#### Troubleshooting
+
+- **Build-Fehler**: Prüfe Railway Logs → **Deployments** → letzter Build
+- **Port-Fehler**: Railway exposes automatisch auf `8080`; prüfe dein Backend: `env.PORT` muss auf Railway's Port hören
+- **DB-Connection-Fehler**: Stelle sicher, dass `DATABASE_URL` korrekt ist und die DB erreichbar
+
 ### Test Email Endpoint
 
 - Endpoint: `POST /api/contact/test-email`

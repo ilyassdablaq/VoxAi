@@ -132,9 +132,9 @@ describe("useAuth Hook", () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(vi.mocked(authService.clearTokens)).toHaveBeenCalled();
       expect(result.current.user).toBeNull();
       expect(result.current.isLoggedIn).toBe(false);
+      expect(vi.mocked(authService.clearTokens)).not.toHaveBeenCalled();
     });
   });
 
