@@ -11,7 +11,6 @@ const cookieOptions = {
   secure: true,
   sameSite: "none" as const,
   path: "/",
-  domain: ".onrender.com",
 };
 
 function applyAuthCookies(

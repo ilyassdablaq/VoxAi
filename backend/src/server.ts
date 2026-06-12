@@ -22,7 +22,12 @@ async function bootstrap() {
   });
 
   await connectDatabase();
-  await initializeWsBroker();
+  try {
+    await initializeWsBroker();
+  } catch (error) {
+    Sentry.captureException(error);
+    logger.warn({ error }, "WS broker initialization failed; continuing without Redis pub/sub");
+  }
   const app = await buildApp();
   const isUpstash = env.REDIS_URL.includes("upstash.io");
   const shouldStartWorkers = env.QUEUE_WORKERS_ENABLED ?? !isUpstash;
