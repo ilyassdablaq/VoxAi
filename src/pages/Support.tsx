@@ -1,11 +1,8 @@
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Loader2, LifeBuoy, Send, Trash2, AlertTriangle, XCircle, Globe } from "lucide-react";
+import { CheckCircle2, Clock, Trash2, AlertTriangle, XCircle, Globe } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   SupportTicket,
@@ -73,61 +70,17 @@ function categoryLabel(value: TicketCategory): string {
   return CATEGORIES.find((c) => c.value === value)?.label ?? value;
 }
 
+function isOpen(ticket: SupportTicket): boolean {
+  return ticket.status === "OPEN" || ticket.status === "IN_PROGRESS";
+}
+
 export default function Support() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [subject, setSubject] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<TicketCategory>("technical");
-  const [priority, setPriority] = useState<TicketPriority>("MEDIUM");
-
   const ticketsQuery = useQuery({
     queryKey: ["tickets"],
     queryFn: () => ticketService.listTickets(),
-  });
-
-  const createMutation = useMutation({
-    mutationFn: () =>
-      ticketService.createTicket({
-        subject: subject.trim(),
-        description: description.trim(),
-        category,
-        priority,
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["tickets"] });
-      setSubject("");
-      setDescription("");
-      setCategory("technical");
-      setPriority("MEDIUM");
-      toast({
-        title: "Ticket erstellt",
-        description: "Unser Support-Team wurde benachrichtigt und meldet sich zeitnah.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Ticket konnte nicht erstellt werden",
-        description: error instanceof Error ? error.message : "Bitte versuche es erneut.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const closeMutation = useMutation({
-    mutationFn: (id: string) => ticketService.updateTicket(id, { status: "CLOSED" }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["tickets"] });
-      toast({ title: "Ticket geschlossen" });
-    },
-    onError: (error) => {
-      toast({
-        title: "Aktion fehlgeschlagen",
-        description: error instanceof Error ? error.message : "Bitte versuche es erneut.",
-        variant: "destructive",
-      });
-    },
   });
 
   const deleteMutation = useMutation({
@@ -145,129 +98,44 @@ export default function Support() {
     },
   });
 
-  const isBusy = createMutation.isPending || closeMutation.isPending || deleteMutation.isPending;
-  const formInvalid = subject.trim().length < 3 || description.trim().length < 10;
-
   const tickets: SupportTicket[] = ticketsQuery.data ?? [];
-  const dashboardTickets = tickets.filter((t) => t.source !== "WIDGET");
-  const widgetTickets = tickets.filter((t) => t.source === "WIDGET");
-  const openTickets = dashboardTickets.filter((t) => t.status === "OPEN" || t.status === "IN_PROGRESS");
-  const resolvedTickets = dashboardTickets.filter((t) => t.status === "RESOLVED" || t.status === "CLOSED");
-  const openWidgetTickets = widgetTickets.filter((t) => t.status === "OPEN" || t.status === "IN_PROGRESS");
-  const resolvedWidgetTickets = widgetTickets.filter((t) => t.status === "RESOLVED" || t.status === "CLOSED");
+  const sortedTickets = [...tickets].sort((a, b) => {
+    if (isOpen(a) !== isOpen(b)) return isOpen(a) ? -1 : 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+  const isBusy = deleteMutation.isPending;
 
   return (
     <DashboardShell
       title="IT Support"
-      description="Beschreibe dein Anliegen oder eine Beschwerde – wir erstellen automatisch ein Support-Ticket."
+      description="Support-Tickets, die deine Website-Besucher über das Chat-Widget einreichen."
     >
-      <div className="grid gap-6 lg:grid-cols-5">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <LifeBuoy className="w-5 h-5 text-primary" />
-              Neues Support-Ticket
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Betreff</label>
-              <Input
-                value={subject}
-                onChange={(event) => setSubject(event.target.value)}
-                placeholder="Kurzbeschreibung des Problems"
-                disabled={isBusy}
-                maxLength={140}
-              />
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Kategorie</label>
-                <select
-                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value as TicketCategory)}
-                  disabled={isBusy}
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c.value} value={c.value}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Priorität</label>
-                <select
-                  className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
-                  value={priority}
-                  onChange={(event) => setPriority(event.target.value as TicketPriority)}
-                  disabled={isBusy}
-                >
-                  {PRIORITIES.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Anliegen / Beschwerde</label>
-              <Textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                placeholder="Beschreibe das Problem so detailliert wie möglich. Welche Schritte führen dazu? Welches Verhalten erwartest du?"
-                rows={7}
-                disabled={isBusy}
-                maxLength={4000}
-              />
-              <p className="text-xs text-muted-foreground text-right">
-                {description.length}/4000
-              </p>
-            </div>
-
-            <Button
-              className="w-full"
-              onClick={() => createMutation.mutate()}
-              disabled={formInvalid || isBusy}
-            >
-              {createMutation.isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4 mr-2" />
-              )}
-              Ticket absenden
-            </Button>
-          </CardContent>
-        </Card>
-
-        <div className="lg:col-span-3 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Aktive Tickets ({openTickets.length})</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {ticketsQuery.isLoading ? (
-                <p className="text-sm text-muted-foreground">Lade Tickets...</p>
-              ) : null}
-              {!ticketsQuery.isLoading && openTickets.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Keine offenen Tickets. Sobald du eines anlegst, erscheint es hier.
-                </p>
-              ) : null}
-              {openTickets.map((ticket) => {
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="w-5 h-5 text-primary" />
+            Support-Tickets ({tickets.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {ticketsQuery.isLoading ? (
+            <p className="text-sm text-muted-foreground">Lade Tickets...</p>
+          ) : tickets.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Noch keine Tickets. Sobald ein Besucher über das Widget ein Ticket einreicht, erscheint es hier.
+              Aktiviere dafür „IT Support" im Widget unter Integrations.
+            </p>
+          ) : (
+            <div className="space-y-3 max-h-[640px] overflow-auto pr-1">
+              {sortedTickets.map((ticket) => {
                 const statusMeta = STATUS_META[ticket.status];
                 const StatusIcon = statusMeta.icon;
                 return (
                   <div key={ticket.id} className="rounded-md border border-border p-4 space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate">{ticket.subject}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold truncate">{ticket.subject}</p>
                           <span
                             className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium ${statusMeta.className}`}
                           >
@@ -279,59 +147,18 @@ export default function Support() {
                           >
                             {PRIORITIES.find((p) => p.value === ticket.priority)?.label ?? ticket.priority}
                           </span>
-                          <span className="text-[11px] text-muted-foreground">
-                            {categoryLabel(ticket.category)}
-                          </span>
                         </div>
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => closeMutation.mutate(ticket.id)}
-                          disabled={isBusy}
-                          title="Ticket schließen"
-                        >
-                          <CheckCircle2 className="w-4 h-4 mr-1" />
-                          Schließen
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{ticket.description}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Erstellt {formatDate(ticket.createdAt)} • ID: {ticket.id.slice(0, 8)}
-                    </p>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Verlauf ({resolvedTickets.length})</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!ticketsQuery.isLoading && resolvedTickets.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Noch keine abgeschlossenen Tickets.</p>
-              ) : null}
-              {resolvedTickets.map((ticket) => {
-                const statusMeta = STATUS_META[ticket.status];
-                const StatusIcon = statusMeta.icon;
-                return (
-                  <div key={ticket.id} className="rounded-md border border-border p-3 space-y-2 opacity-90">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{ticket.subject}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                          <span
-                            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium ${statusMeta.className}`}
-                          >
-                            <StatusIcon className="w-3 h-3" />
-                            {statusMeta.label}
-                          </span>
+                        <div className="flex flex-wrap items-center gap-3 mt-1">
+                          {ticket.visitorName ? (
+                            <span className="text-xs text-muted-foreground font-medium">{ticket.visitorName}</span>
+                          ) : null}
+                          {ticket.visitorEmail ? (
+                            <a href={`mailto:${ticket.visitorEmail}`} className="text-xs text-primary hover:underline">
+                              {ticket.visitorEmail}
+                            </a>
+                          ) : null}
                           <span className="text-[11px] text-muted-foreground">
-                            {categoryLabel(ticket.category)} • {formatDate(ticket.updatedAt)}
+                            {categoryLabel(ticket.category)} • {formatDate(ticket.createdAt)}
                           </span>
                         </div>
                       </div>
@@ -345,100 +172,14 @@ export default function Support() {
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{ticket.description}</p>
                   </div>
                 );
               })}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Widget visitor tickets — full width row */}
-        <Card className="lg:col-span-5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="w-5 h-5 text-primary" />
-              Website-Besucher Tickets ({widgetTickets.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {ticketsQuery.isLoading ? (
-              <p className="text-sm text-muted-foreground">Lade Tickets...</p>
-            ) : widgetTickets.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Noch keine Tickets von Webseitenbesuchern. Aktiviere "IT Support" im Widget unter Integrations.
-              </p>
-            ) : (
-              <div className="space-y-3 max-h-[480px] overflow-auto pr-1">
-                {[...openWidgetTickets, ...resolvedWidgetTickets].map((ticket) => {
-                  const statusMeta = STATUS_META[ticket.status];
-                  const StatusIcon = statusMeta.icon;
-                  return (
-                    <div key={ticket.id} className="rounded-md border border-border p-4 space-y-2">
-                      <div className="flex items-start justify-between gap-3 flex-wrap">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-semibold truncate">{ticket.subject}</p>
-                            <span
-                              className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium ${statusMeta.className}`}
-                            >
-                              <StatusIcon className="w-3 h-3" />
-                              {statusMeta.label}
-                            </span>
-                            <span
-                              className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium ${PRIORITY_BADGE[ticket.priority]}`}
-                            >
-                              {PRIORITIES.find((p) => p.value === ticket.priority)?.label ?? ticket.priority}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-3 mt-1">
-                            {ticket.visitorName ? (
-                              <span className="text-xs text-muted-foreground font-medium">{ticket.visitorName}</span>
-                            ) : null}
-                            {ticket.visitorEmail ? (
-                              <a
-                                href={`mailto:${ticket.visitorEmail}`}
-                                className="text-xs text-primary hover:underline"
-                              >
-                                {ticket.visitorEmail}
-                              </a>
-                            ) : null}
-                            <span className="text-[11px] text-muted-foreground">
-                              {categoryLabel(ticket.category)} • {formatDate(ticket.createdAt)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex gap-1 shrink-0">
-                          {(ticket.status === "OPEN" || ticket.status === "IN_PROGRESS") ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => closeMutation.mutate(ticket.id)}
-                              disabled={isBusy}
-                            >
-                              <CheckCircle2 className="w-4 h-4 mr-1" />
-                              Schließen
-                            </Button>
-                          ) : null}
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => deleteMutation.mutate(ticket.id)}
-                            disabled={isBusy}
-                            title="Ticket löschen"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{ticket.description}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </DashboardShell>
   );
 }

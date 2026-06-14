@@ -75,6 +75,9 @@
         supportSubmit: "Ticket absenden",
         supportSuccess: "Ticket erstellt! Wir melden uns per E-Mail.",
         supportError: "Fehler beim Absenden. Bitte versuche es erneut.",
+        supportFillFields: "Bitte fülle Name, E-Mail und Betreff aus.",
+        supportInvalidEmail: "Bitte gib eine gültige E-Mail-Adresse ein.",
+        supportDescTooShort: "Die Beschreibung muss mindestens 10 Zeichen lang sein.",
         supportSending: "Wird gesendet...",
         categories: [
           { value: "technical", label: "Technisches Problem" },
@@ -115,6 +118,9 @@
         supportSubmit: "Envoyer le ticket",
         supportSuccess: "Ticket cree ! Nous vous repondrons par e-mail.",
         supportError: "Erreur lors de l'envoi. Veuillez reessayer.",
+        supportFillFields: "Veuillez remplir le nom, l'e-mail et le sujet.",
+        supportInvalidEmail: "Veuillez saisir une adresse e-mail valide.",
+        supportDescTooShort: "La description doit comporter au moins 10 caracteres.",
         supportSending: "Envoi en cours...",
         categories: [
           { value: "technical", label: "Probleme technique" },
@@ -154,6 +160,9 @@
       supportSubmit: "Submit ticket",
       supportSuccess: "Ticket created! We'll reply to your email shortly.",
       supportError: "Failed to submit. Please try again.",
+      supportFillFields: "Please fill in your name, email and subject.",
+      supportInvalidEmail: "Please enter a valid email address.",
+      supportDescTooShort: "The description must be at least 10 characters long.",
       supportSending: "Sending...",
       categories: [
         { value: "technical", label: "Technical issue" },
@@ -946,10 +955,22 @@
       var category = supCategorySelect.value;
       var description = supMsgTextarea.value.trim();
 
-      if (!name || !email || !subject || description.length < 10) {
+      if (!name || !email || !subject) {
         supFeedback.className = "sup-error";
         supFeedback.style.display = "block";
-        supFeedback.innerText = localizedCopy.supportError || "Please fill in all fields.";
+        supFeedback.innerText = localizedCopy.supportFillFields || "Please fill in your name, email and subject.";
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        supFeedback.className = "sup-error";
+        supFeedback.style.display = "block";
+        supFeedback.innerText = localizedCopy.supportInvalidEmail || "Please enter a valid email address.";
+        return;
+      }
+      if (description.length < 10) {
+        supFeedback.className = "sup-error";
+        supFeedback.style.display = "block";
+        supFeedback.innerText = localizedCopy.supportDescTooShort || "The description must be at least 10 characters long.";
         return;
       }
 
