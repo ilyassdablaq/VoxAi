@@ -15,6 +15,7 @@ type IntegrationSettingsRecord = {
   microphoneEnabled: boolean;
   consentRequired: boolean;
   privacyPolicyUrl: string;
+  supportEnabled: boolean;
   embedKey: string;
   updatedAt: Date;
 };
@@ -46,6 +47,7 @@ export class IntegrationRepository {
         microphone_enabled BOOLEAN NOT NULL DEFAULT FALSE,
         consent_required BOOLEAN NOT NULL DEFAULT TRUE,
         privacy_policy_url TEXT NOT NULL DEFAULT '',
+        support_enabled BOOLEAN NOT NULL DEFAULT FALSE,
         embed_key TEXT UNIQUE NOT NULL,
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
@@ -91,6 +93,11 @@ export class IntegrationRepository {
       ADD COLUMN IF NOT EXISTS privacy_policy_url TEXT NOT NULL DEFAULT ''
     `);
 
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE integration_settings
+      ADD COLUMN IF NOT EXISTS support_enabled BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+
     this.initialized = true;
   }
 
@@ -108,6 +115,7 @@ export class IntegrationRepository {
     microphone_enabled: boolean | null;
     consent_required: boolean | null;
     privacy_policy_url: string | null;
+    support_enabled: boolean | null;
     embed_key: string;
     updated_at: Date;
   }): IntegrationSettingsRecord {
@@ -125,6 +133,7 @@ export class IntegrationRepository {
       microphoneEnabled: row.microphone_enabled ?? false,
       consentRequired: row.consent_required ?? true,
       privacyPolicyUrl: row.privacy_policy_url ?? "",
+      supportEnabled: row.support_enabled ?? false,
       embedKey: row.embed_key,
       updatedAt: row.updated_at,
     };
@@ -148,12 +157,13 @@ export class IntegrationRepository {
         microphone_enabled: boolean | null;
         consent_required: boolean | null;
         privacy_policy_url: string | null;
+        support_enabled: boolean | null;
         embed_key: string;
         updated_at: Date;
       }>
     >(
       `
-        SELECT user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, consent_required, privacy_policy_url, embed_key, updated_at
+        SELECT user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, consent_required, privacy_policy_url, support_enabled, embed_key, updated_at
         FROM integration_settings
         WHERE user_id = $1
       `,
@@ -167,8 +177,8 @@ export class IntegrationRepository {
     const embedKey = createEmbedKey();
     await prisma.$executeRawUnsafe(
       `
-        INSERT INTO integration_settings (user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, consent_required, privacy_policy_url, embed_key, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+        INSERT INTO integration_settings (user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, consent_required, privacy_policy_url, support_enabled, embed_key, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, FALSE, $14, NOW())
       `,
       userId,
       "Chatbot",
@@ -200,6 +210,7 @@ export class IntegrationRepository {
       microphoneEnabled: false,
       consentRequired: true,
       privacyPolicyUrl: "",
+      supportEnabled: false,
       embedKey,
       updatedAt: new Date(),
     } as IntegrationSettingsRecord;
@@ -218,6 +229,7 @@ export class IntegrationRepository {
     microphoneEnabled: boolean;
     consentRequired: boolean;
     privacyPolicyUrl: string;
+    supportEnabled: boolean;
   }) {
     await this.ensureTable();
 
@@ -238,6 +250,7 @@ export class IntegrationRepository {
         microphone_enabled: boolean | null;
         consent_required: boolean | null;
         privacy_policy_url: string | null;
+        support_enabled: boolean | null;
         embed_key: string;
         updated_at: Date;
       }>
@@ -256,9 +269,10 @@ export class IntegrationRepository {
             microphone_enabled = $11,
             consent_required = $12,
             privacy_policy_url = $13,
+            support_enabled = $14,
             updated_at = NOW()
         WHERE user_id = $1
-          RETURNING user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, consent_required, privacy_policy_url, embed_key, updated_at
+          RETURNING user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, consent_required, privacy_policy_url, support_enabled, embed_key, updated_at
       `,
       userId,
       payload.botName,
@@ -273,6 +287,7 @@ export class IntegrationRepository {
       payload.microphoneEnabled,
       payload.consentRequired,
       payload.privacyPolicyUrl,
+      payload.supportEnabled,
     );
 
     if (updatedRows.length === 0) {
@@ -320,12 +335,13 @@ export class IntegrationRepository {
         microphone_enabled: boolean | null;
         consent_required: boolean | null;
         privacy_policy_url: string | null;
+        support_enabled: boolean | null;
         embed_key: string;
         updated_at: Date;
       }>
     >(
       `
-        SELECT user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, consent_required, privacy_policy_url, embed_key, updated_at
+        SELECT user_id, bot_name, theme_color, theme_mode, position, language, launcher_text, launcher_icon, initial_bot_message, max_session_questions, microphone_enabled, consent_required, privacy_policy_url, support_enabled, embed_key, updated_at
         FROM integration_settings
         WHERE embed_key = $1
       `,

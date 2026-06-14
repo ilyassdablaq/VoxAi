@@ -14,6 +14,7 @@ export interface IntegrationSettings {
   microphoneEnabled: boolean;
   consentRequired: boolean;
   privacyPolicyUrl: string;
+  supportEnabled: boolean;
   embedKey: string;
   updatedAt: string;
 }
@@ -36,6 +37,7 @@ export const integrationService = {
     microphoneEnabled: boolean;
     consentRequired: boolean;
     privacyPolicyUrl: string;
+    supportEnabled: boolean;
   }) {
     return apiClient.put<IntegrationSettings>("/api/integrations/settings", payload);
   },

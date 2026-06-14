@@ -47,6 +47,7 @@ export function OnboardingWizard({ onDone }: Props) {
         microphoneEnabled: false,
         consentRequired: true,
         privacyPolicyUrl: "",
+        supportEnabled: false,
       }),
     onSuccess: () => setStep(1),
   });

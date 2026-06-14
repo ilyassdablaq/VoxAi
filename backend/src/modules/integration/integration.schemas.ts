@@ -13,6 +13,7 @@ export const integrationSettingsSchema = z.object({
   microphoneEnabled: z.boolean().default(false),
   consentRequired: z.boolean().default(true),
   privacyPolicyUrl: z.string().max(1000).default(""),
+  supportEnabled: z.boolean().default(false),
 });
 
 export const embedChatSchema = z.object({

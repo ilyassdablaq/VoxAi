@@ -137,7 +137,7 @@ export default function Integrations() {
     setMicrophoneEnabled(Boolean(data.microphoneEnabled));
     setConsentRequired(data.consentRequired ?? true);
     setPrivacyPolicyUrl(typeof data.privacyPolicyUrl === "string" ? data.privacyPolicyUrl.trim() : "");
-    setSupportEnabled(Boolean((data as Record<string, unknown>).supportEnabled));
+    setSupportEnabled(Boolean(data.supportEnabled));
   }, [data]);
 
   const effectiveData = useMemo(() => {
@@ -190,6 +190,7 @@ export default function Integrations() {
         microphoneEnabled,
         consentRequired,
         privacyPolicyUrl: privacyPolicyUrl.trim(),
+        supportEnabled,
       }),
     onSuccess: (updated) => {
       const nextInitialBotMessage = initialBotMessage.trim() || DEFAULT_INITIAL_BOT_MESSAGE;
@@ -219,6 +220,7 @@ export default function Integrations() {
       setMicrophoneEnabled(normalized.microphoneEnabled);
       setConsentRequired(normalized.consentRequired);
       setPrivacyPolicyUrl(normalized.privacyPolicyUrl);
+      setSupportEnabled(Boolean(updated.supportEnabled));
       toast({ title: "Saved", description: "Integration settings updated." });
     },
     onError: (error) => {
