@@ -3,6 +3,7 @@ import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { initializeSentry, Sentry } from "./config/sentry.js";
 import { connectDatabase, disconnectDatabase } from "./infra/database/prisma.js";
+import { ensureVectorIndexes } from "./infra/database/ensure-indexes.js";
 import { disconnectReplica } from "./infra/database/prisma-replica.js";
 import { startWorkers } from "./infra/queue/queues.js";
 import { redis, redisPublisher, redisSubscriber } from "./infra/cache/redis.js";
@@ -23,6 +24,7 @@ async function bootstrap() {
   });
 
   await connectDatabase();
+  await ensureVectorIndexes();
   try {
     await initializeWsBroker();
   } catch (error) {

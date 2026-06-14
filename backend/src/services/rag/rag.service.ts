@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { isIP } from "node:net";
 import { PDFParse } from "pdf-parse";
 import OpenAI from "openai";
 import { XMLParser } from "fast-xml-parser";
@@ -9,6 +8,7 @@ import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
 import { prisma } from "../../infra/database/prisma.js";
 import { renderPageHtml } from "./headless-render.js";
+import { assertPublicUrl, safeFetch } from "./url-guard.js";
 
 const EMBEDDING_DIMENSION = 1536;
 const CHUNK_WORDS = 400;
@@ -23,6 +23,10 @@ const RENDER_FALLBACK_THRESHOLD = 200;
 const CONTENT_CONTAINERS = ["main", "article", "[role=main]", ".content", "#content", ".post-content", ".page-content"];
 const RETRIEVAL_CACHE_TTL_MS = 45_000;
 const RETRIEVAL_CACHE_MAX_ITEMS = 1_000;
+// Cosine distance (pgvector `<=>`, range 0..2) above which a chunk is treated
+// as irrelevant and dropped. 0.75 ≈ cosine similarity ≥ 0.25 — cuts clearly
+// off-topic chunks while keeping recall. Tune lower to be stricter.
+const RETRIEVAL_MAX_COSINE_DISTANCE = 0.75;
 const EMBEDDING_CONCURRENCY = 4;
 const PROMPT_INJECTION_PATTERNS = [
   /ignore\s+(all|previous)\s+instructions/i,
@@ -120,47 +124,6 @@ function hasPromptInjectionContent(value: string): boolean {
   return PROMPT_INJECTION_PATTERNS.some((pattern) => pattern.test(value));
 }
 
-function isPrivateIp(hostname: string): boolean {
-  const ipVersion = isIP(hostname);
-  if (ipVersion === 4) {
-    if (hostname.startsWith("10.")) {
-      return true;
-    }
-
-    if (hostname.startsWith("127.")) {
-      return true;
-    }
-
-    if (hostname.startsWith("192.168.")) {
-      return true;
-    }
-
-    const octets = hostname.split(".").map((part) => Number(part));
-    return octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31;
-  }
-
-  if (ipVersion === 6) {
-    const normalized = hostname.toLowerCase();
-    return normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe80:");
-  }
-
-  return false;
-}
-
-function isPrivateCrawlTarget(url: URL): boolean {
-  const hostname = url.hostname.toLowerCase();
-
-  if (["localhost", "0.0.0.0", "::1"].includes(hostname)) {
-    return true;
-  }
-
-  if (hostname.endsWith(".local") || hostname.endsWith(".localhost")) {
-    return true;
-  }
-
-  return isPrivateIp(hostname);
-}
-
 function chunkText(text: string, wordsPerChunk = CHUNK_WORDS, overlapWords = CHUNK_OVERLAP_WORDS): string[] {
   const words = normalizeWhitespace(text).split(" ").filter(Boolean);
   if (words.length === 0) {
@@ -233,16 +196,20 @@ export class RagService {
     const queryEmbedding = await this.embedText(queryText);
     const embeddingSql = toVectorSql(queryEmbedding);
 
+    // Cosine distance (`<=>`) + threshold so off-topic queries don't pull in
+    // the nearest-but-irrelevant chunks. topK stays $3; threshold is $4.
     const rows = (await prisma.$queryRawUnsafe(
       `SELECT kc."chunkText" as chunk_text
        FROM "KnowledgeChunk" kc
        INNER JOIN "KnowledgeDocument" kd ON kd.id = kc."documentId"
        WHERE kd."userId" = $1
-       ORDER BY kc.embedding <-> $2::vector
+         AND (kc.embedding <=> $2::vector) <= $4
+       ORDER BY kc.embedding <=> $2::vector
        LIMIT $3`,
       userId,
       embeddingSql,
       topK,
+      RETRIEVAL_MAX_COSINE_DISTANCE,
     )) as Array<{ chunk_text: string }>;
 
     const contexts = rows.map((row) => row.chunk_text);
@@ -409,13 +376,9 @@ export class RagService {
   async ingestWebsite(input: { userId: string; url: string; maxPages: number }) {
     logger.info({ userId: input.userId, url: input.url, maxPages: input.maxPages }, "RAG website crawl started");
     const rootUrl = new URL(input.url);
-    if (!["http:", "https:"].includes(rootUrl.protocol)) {
-      throw new AppError(400, "INVALID_URL_PROTOCOL", "Only HTTP/HTTPS URLs are supported");
-    }
-
-    if (isPrivateCrawlTarget(rootUrl)) {
-      throw new AppError(400, "INVALID_CRAWL_TARGET", "Private or local crawl targets are not allowed");
-    }
+    // Protocol + literal-host + DNS-resolution SSRF check (rejects hosts that
+    // resolve to private addresses, closing the DNS-rebinding hole).
+    await assertPublicUrl(rootUrl);
 
     const visited = new Set<string>();
     const queue: string[] = [rootUrl.toString()];
@@ -441,12 +404,14 @@ export class RagService {
             Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
           },
-          redirect: "follow",
           signal: controller.signal,
         };
 
         try {
-          response = await fetch(currentUrl, requestInit);
+          // safeFetch follows redirects manually and re-validates every hop
+          // against the SSRF guard, so a public URL cannot redirect us into the
+          // private network.
+          response = await safeFetch(currentUrl, requestInit);
         } catch (fetchError) {
           if (isTlsCertificateError(fetchError)) {
             logger.warn({ url: currentUrl }, "RAG crawl TLS certificate issue detected");

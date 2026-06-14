@@ -16,6 +16,7 @@
 
 import type { Browser } from "playwright";
 import { logger } from "../../config/logger.js";
+import { assertPublicUrl, isPrivateHostnameLiteral } from "./url-guard.js";
 
 const RENDER_NAV_TIMEOUT_MS = 20_000;
 const RENDER_NETWORKIDLE_TIMEOUT_MS = 8_000;
@@ -62,12 +63,33 @@ async function getBrowser(): Promise<Browser> {
  */
 export async function renderPageHtml(url: string, userAgent: string): Promise<string | null> {
   try {
+    // SSRF: validate the entry URL (incl. DNS) before launching anything.
+    await assertPublicUrl(new URL(url));
+
     const browser = await getBrowser();
     const context = await browser.newContext({
       userAgent,
       locale: "en-US",
       javaScriptEnabled: true,
     });
+
+    // SSRF: block navigations/redirects to private hosts and drop requests to
+    // literal private addresses (subresources). Document requests get a full
+    // DNS re-validation; cheaper literal check for everything else.
+    await context.route("**/*", async (route) => {
+      try {
+        const reqUrl = new URL(route.request().url());
+        if (route.request().resourceType() === "document") {
+          await assertPublicUrl(reqUrl);
+        } else if (isPrivateHostnameLiteral(reqUrl.hostname)) {
+          throw new Error("blocked private subresource");
+        }
+        await route.continue();
+      } catch {
+        await route.abort().catch(() => undefined);
+      }
+    });
+
     try {
       const page = await context.newPage();
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: RENDER_NAV_TIMEOUT_MS });
