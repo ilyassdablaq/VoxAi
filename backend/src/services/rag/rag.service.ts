@@ -8,11 +8,19 @@ import { AppError } from "../../common/errors/app-error.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
 import { prisma } from "../../infra/database/prisma.js";
+import { renderPageHtml } from "./headless-render.js";
 
 const EMBEDDING_DIMENSION = 1536;
 const CHUNK_WORDS = 400;
 const CHUNK_OVERLAP_WORDS = 70;
 const CRAWL_TIMEOUT_MS = 12000;
+// Real browser UA — many sites 403/429 a custom bot UA.
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+// Below this many chars of static text we treat the page as a JS-rendered SPA
+// and retry with a headless browser.
+const RENDER_FALLBACK_THRESHOLD = 200;
+const CONTENT_CONTAINERS = ["main", "article", "[role=main]", ".content", "#content", ".post-content", ".page-content"];
 const RETRIEVAL_CACHE_TTL_MS = 45_000;
 const RETRIEVAL_CACHE_MAX_ITEMS = 1_000;
 const EMBEDDING_CONCURRENCY = 4;
@@ -39,6 +47,73 @@ function isTlsCertificateError(error: unknown): boolean {
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Extract the main readable text from a loaded document. Mutates `$` by
+ * stripping non-content nodes, so pass a dedicated parse per call.
+ */
+function extractReadableText($: cheerio.CheerioAPI): string {
+  $("script, style, noscript, meta, link, svg, iframe, image, picture").remove();
+
+  for (const selector of CONTENT_CONTAINERS) {
+    const containerText = normalizeWhitespace($(selector).text());
+    if (containerText && containerText.length > 50) {
+      return containerText;
+    }
+  }
+
+  return normalizeWhitespace($("body").text());
+}
+
+/** Flatten meaningful string values out of a JSON-LD block. */
+function jsonLdToText(raw: string): string {
+  try {
+    const parts: string[] = [];
+    const walk = (value: unknown): void => {
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed && !trimmed.startsWith("http") && !trimmed.startsWith("@")) parts.push(trimmed);
+      } else if (Array.isArray(value)) {
+        value.forEach(walk);
+      } else if (value && typeof value === "object") {
+        for (const [key, child] of Object.entries(value)) {
+          if (key !== "@context" && key !== "@id" && key !== "@type") walk(child);
+        }
+      }
+    };
+    walk(JSON.parse(raw));
+    return normalizeWhitespace(parts.join(" "));
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Pull title / description / og: / JSON-LD text from raw HTML. Cheap enrichment
+ * that gives thin or SPA pages at least some content. Parses its own copy so it
+ * is unaffected by `extractReadableText` mutations.
+ */
+function extractMetadataText(html: string): string {
+  const $ = cheerio.load(html);
+  const parts: string[] = [];
+
+  const title = normalizeWhitespace($("title").first().text());
+  if (title) parts.push(title);
+
+  const description =
+    $('meta[name="description"]').attr("content") || $('meta[property="og:description"]').attr("content");
+  if (description) parts.push(normalizeWhitespace(description));
+
+  const ogTitle = $('meta[property="og:title"]').attr("content");
+  if (ogTitle) parts.push(normalizeWhitespace(ogTitle));
+
+  $('script[type="application/ld+json"]').each((_, element) => {
+    const flat = jsonLdToText($(element).contents().text());
+    if (flat) parts.push(flat);
+  });
+
+  return Array.from(new Set(parts)).join(" — ");
 }
 
 function hasPromptInjectionContent(value: string): boolean {
@@ -362,7 +437,7 @@ export class RagService {
       try {
         const requestInit: RequestInit = {
           headers: {
-            "User-Agent": "Mozilla/5.0 (compatible; voxflow-bot/1.0; +https://voxflow.io/bot)",
+            "User-Agent": BROWSER_USER_AGENT,
             Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
           },
@@ -397,30 +472,35 @@ export class RagService {
           continue;
         }
 
-        const html = await response.text();
+        let html = await response.text();
         if (!html || html.length === 0) {
           crawlErrors.push({ url: currentUrl, reason: "Empty response body" });
           continue;
         }
 
-        const $ = cheerio.load(html);
-        
-        // Remove script, style, and non-content elements
-        $("script, style, noscript, meta, link, svg, iframe, image, picture").remove();
+        let $ = cheerio.load(html);
+        let pageText = extractReadableText($);
 
-        let pageText = "";
-        const contentContainers = ["main", "article", "[role=main]", ".content", "#content", ".post-content", ".page-content"];
-
-        for (const selector of contentContainers) {
-          const containerText = normalizeWhitespace($(selector).text());
-          if (containerText && containerText.length > 50) {
-            pageText = containerText;
-            break;
+        // SPA detection: almost no server-rendered text → render with a headless
+        // browser and re-extract from the post-render DOM.
+        if (pageText.length < RENDER_FALLBACK_THRESHOLD) {
+          const rendered = await renderPageHtml(currentUrl, BROWSER_USER_AGENT);
+          if (rendered) {
+            const rendered$ = cheerio.load(rendered);
+            const renderedText = extractReadableText(rendered$);
+            if (renderedText.length > pageText.length) {
+              html = rendered;
+              $ = cheerio.load(rendered); // fresh parse for link discovery below
+              pageText = renderedText;
+              logger.debug({ url: currentUrl, textLength: pageText.length }, "RAG crawl used headless render");
+            }
           }
         }
 
-        if (!pageText || pageText.length < 50) {
-          pageText = normalizeWhitespace($("body").text());
+        // Enrich with <head> metadata (title/description/og/JSON-LD) — helps thin pages.
+        const metaText = extractMetadataText(html);
+        if (metaText) {
+          pageText = pageText ? `${metaText}\n${pageText}` : metaText;
         }
 
         logger.debug(
@@ -482,9 +562,14 @@ export class RagService {
 
     if (!merged) {
       logger.warn({ userId: input.userId, url: input.url, crawlErrors }, "RAG website crawl produced no content");
-      throw new AppError(400, "URL_CRAWL_EMPTY", "No crawlable text content found for the provided URL", {
-        crawlErrors: crawlErrors.slice(0, 5),
-      });
+      throw new AppError(
+        400,
+        "URL_CRAWL_EMPTY",
+        "No readable text could be extracted from the URL. The site may block automated access or its content could not be loaded.",
+        {
+          crawlErrors: crawlErrors.slice(0, 5),
+        },
+      );
     }
 
     const result = await this.ingestPlainText({

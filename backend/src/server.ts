@@ -7,6 +7,7 @@ import { disconnectReplica } from "./infra/database/prisma-replica.js";
 import { startWorkers } from "./infra/queue/queues.js";
 import { redis, redisPublisher, redisSubscriber } from "./infra/cache/redis.js";
 import { initializeWsBroker } from "./infra/ws/ws-broker.service.js";
+import { closeRenderBrowser } from "./services/rag/headless-render.js";
 
 async function bootstrap() {
   initializeSentry();
@@ -40,6 +41,7 @@ async function bootstrap() {
   const closeGracefully = async () => {
     logger.info("Shutting down gracefully...");
     await app.close();
+    await closeRenderBrowser();
     await Promise.all(workers.map((worker) => worker.close()));
     await disconnectDatabase();
     await disconnectReplica();
