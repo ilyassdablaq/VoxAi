@@ -90,14 +90,15 @@ export class DeveloperService {
   }
 
   getSdkSnippets() {
-    const restBaseUrl = `${env.APP_ORIGIN}/api`;
-    const wsBaseUrl = `${env.APP_ORIGIN.replace(/^http/, "ws")}/ws/conversations/{conversationId}`;
+    const apiBase = (env.PUBLIC_API_BASE_URL ?? env.APP_ORIGIN).replace(/\/+$/, "");
+    const restBaseUrl = `${apiBase}/api`;
+    const wsBaseUrl = `${apiBase.replace(/^http/, "ws")}/ws/conversations/{conversationId}`;
 
     return {
-      restExample: `curl -X POST ${restBaseUrl}/embed/chat \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "embedKey": "YOUR_EMBED_KEY",\n    "message": "Hello from API"\n  }'`,
-      websocketExample: `const socket = new WebSocket("${wsBaseUrl}");\n\nsocket.addEventListener("open", () => {\n  socket.send(JSON.stringify({\n    type: "auth",\n    data: "authenticate",\n    token: "YOUR_JWT"\n  }));\n});`,
-      javascriptExample: `const response = await fetch("${restBaseUrl}/embed/chat", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "x-api-key": process.env.VOX_API_KEY\n  },\n  body: JSON.stringify({\n    embedKey: "YOUR_EMBED_KEY",\n    message: "Can you help with billing?"\n  })\n});\n\nconst data = await response.json();\nconsole.log(data);`,
-      pythonExample: `import os\nimport requests\n\nresp = requests.post(\n    "${restBaseUrl}/embed/chat",\n    headers={\n        "x-api-key": os.getenv("VOX_API_KEY"),\n        "Content-Type": "application/json"\n    },\n    json={\n        "embedKey": "YOUR_EMBED_KEY",\n        "message": "Hello from Python"\n    }\n)\n\nprint(resp.json())`,
+      restExample: `curl -X POST ${restBaseUrl}/v1/chat \\\n  -H "Content-Type: application/json" \\\n  -H "x-api-key: YOUR_API_KEY" \\\n  -d '{ "message": "Hello from the API" }'`,
+      websocketExample: `// First create a conversation via POST ${restBaseUrl}/v1/chat to get a\n// conversationId, then stream further turns over the socket:\nconst socket = new WebSocket("${wsBaseUrl}?apiKey=YOUR_API_KEY");\n\nsocket.addEventListener("open", () => {\n  socket.send(JSON.stringify({ type: "text_message", data: "Hello", language: "en" }));\n});\n\nsocket.addEventListener("message", (event) => {\n  const evt = JSON.parse(event.data);\n  if (evt.type === "assistant_delta") process.stdout.write(evt.data.token);\n  if (evt.type === "assistant_response") console.log("\\n", evt.data.text);\n});`,
+      javascriptExample: `const response = await fetch("${restBaseUrl}/v1/chat", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "x-api-key": process.env.VOX_API_KEY\n  },\n  body: JSON.stringify({\n    message: "Can you help with billing?"\n    // conversationId: "..." // optional: continue an existing conversation\n  })\n});\n\nconst data = await response.json();\nconsole.log(data.message.content);`,
+      pythonExample: `import os\nimport requests\n\nresp = requests.post(\n    "${restBaseUrl}/v1/chat",\n    headers={\n        "x-api-key": os.getenv("VOX_API_KEY"),\n        "Content-Type": "application/json"\n    },\n    json={ "message": "Hello from Python" }\n)\n\nprint(resp.json()["message"]["content"])`,
     };
   }
 }

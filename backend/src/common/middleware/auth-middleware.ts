@@ -3,6 +3,43 @@ import { FastifyReply, FastifyRequest } from "fastify";
 import { prisma } from "../../infra/database/prisma.js";
 import { AppError } from "../errors/app-error.js";
 
+export interface ApiKeyUser {
+  sub: string;
+  email?: string;
+  role?: "USER" | "ADMIN";
+  type?: string;
+  apiKeyId?: string;
+}
+
+/**
+ * Validate a raw API key (`vox_…`) against the hashed store. Returns the
+ * resolved user identity, or null if the key is unknown/inactive. Updates
+ * `lastUsedAt` best-effort. Shared by REST (`authenticateAny`) and the
+ * WebSocket gateway so both honour the same key lifecycle.
+ */
+export async function verifyApiKey(rawKey: string): Promise<ApiKeyUser | null> {
+  const keyHash = createHash("sha256").update(rawKey).digest("hex");
+  const key = await prisma.aPIKey.findUnique({
+    where: { keyHash },
+    include: { user: true },
+  });
+
+  if (!key || !key.isActive) {
+    return null;
+  }
+
+  // fire-and-forget lastUsedAt update
+  void prisma.aPIKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } });
+
+  return {
+    sub: key.userId,
+    email: key.user.email,
+    role: key.user.role,
+    type: "api_key",
+    apiKeyId: key.id,
+  };
+}
+
 // Priority: Cookie JWT → Bearer JWT → API-Key (x-api-key header)
 export async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
   try {
@@ -47,26 +84,11 @@ export async function authenticateAny(request: FastifyRequest, _reply: FastifyRe
   }
 
   if (apiKeyHeader && typeof apiKeyHeader === "string") {
-    const keyHash = createHash("sha256").update(apiKeyHeader).digest("hex");
-    const key = await prisma.aPIKey.findUnique({
-      where: { keyHash },
-      include: { user: true },
-    });
-
-    if (!key || !key.isActive) {
+    const apiUser = await verifyApiKey(apiKeyHeader);
+    if (!apiUser) {
       throw new AppError(401, "INVALID_API_KEY", "Invalid API key");
     }
-
-    request.user = {
-      sub: key.userId,
-      email: key.user.email,
-      role: key.user.role,
-      type: "api_key",
-      apiKeyId: key.id,
-    };
-
-    // fire-and-forget lastUsedAt update
-    void prisma.aPIKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } });
+    request.user = apiUser;
     return;
   }
 

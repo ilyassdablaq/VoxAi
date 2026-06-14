@@ -21,6 +21,9 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   HOST: z.string().default("0.0.0.0"),
   APP_ORIGIN: z.string().url(),
+  // Public base URL of THIS backend (Railway), used in developer SDK snippets.
+  // Falls back to APP_ORIGIN when unset — set it to the backend's own URL.
+  PUBLIC_API_BASE_URL: z.string().url().optional(),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
   JWT_ACCESS_SECRET: z.string().min(16),

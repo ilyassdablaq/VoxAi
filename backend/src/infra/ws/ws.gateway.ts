@@ -4,6 +4,7 @@ import { AppError } from "../../common/errors/app-error.js";
 import { AiOrchestratorService } from "../../services/ai/ai-orchestrator.service.js";
 import { ConversationRepository } from "../../modules/conversation/conversation.repository.js";
 import { assertTenantAccess } from "../../common/services/tenant-guard.service.js";
+import { verifyApiKey } from "../../common/middleware/auth-middleware.js";
 import { usageTracker } from "../../common/services/usage-tracker.service.js";
 import { logger } from "../../config/logger.js";
 import { registerSocket, publishToConversation, sendLocal } from "./ws-broker.service.js";
@@ -69,26 +70,38 @@ export function registerWebSocketGateway(
       if (presenceRelease) await presenceRelease().catch(() => undefined);
     });
 
-    // ---- 1. Authenticate ----
+    // ---- 1. Authenticate (JWT via ?token=/cookie, or developer API key via ?apiKey=) ----
     try {
       let token: string | undefined;
+      let apiKey: string | undefined;
       try {
         const url = new URL(request.url, `http://${request.headers.host}`);
         token = url.searchParams.get("token") ?? undefined;
+        apiKey = url.searchParams.get("apiKey") ?? undefined;
       } catch {
         /* ignore url parse errors */
       }
       token = token ?? (request as { cookies?: { accessToken?: string } }).cookies?.accessToken;
 
-      if (!token) {
-        sendError(typedSocket, "Authentication required", "UNAUTHORIZED");
-        typedSocket.close(1008, "Authentication required");
-        return;
+      if (apiKey) {
+        const apiUser = await verifyApiKey(apiKey);
+        if (!apiUser) {
+          sendError(typedSocket, "Invalid API key", "UNAUTHORIZED");
+          typedSocket.close(1008, "Invalid API key");
+          return;
+        }
+        request.user = apiUser as typeof request.user;
+        authenticatedUserId = apiUser.sub;
+      } else {
+        if (!token) {
+          sendError(typedSocket, "Authentication required", "UNAUTHORIZED");
+          typedSocket.close(1008, "Authentication required");
+          return;
+        }
+        request.user = (await request.server.jwt.verify(token)) as typeof request.user;
+        const user = request.user as { sub: string };
+        authenticatedUserId = user.sub;
       }
-
-      request.user = (await request.server.jwt.verify(token)) as typeof request.user;
-      const user = request.user as { sub: string };
-      authenticatedUserId = user.sub;
       clearTimeout(authTimeout);
     } catch {
       sendError(typedSocket, "Authentication failed", "UNAUTHORIZED");
