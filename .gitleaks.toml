@@ -1,0 +1,20 @@
+title = "VoxAI Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test fixture secrets and example config files"
+paths = [
+  "backend/src/test/setup.ts",
+  "backend/.env.example",
+]
+
+[[allowlists]]
+description = "Regex patterns used as detection rules in guardrails service (not real secrets)"
+paths = [
+  "backend/src/services/ai/guardrails.service.ts",
+]
+regexes = [
+  '''api[_-]?key\|token\|password\|secret''',
+]

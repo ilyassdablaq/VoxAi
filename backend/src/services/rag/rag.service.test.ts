@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "../../common/errors/app-error";
 
-const { mockPrisma } = vi.hoisted(() => ({
+const {
+  mockPrisma,
+  mockHybridRetrieve,
+  mockCacheGetRetrieval,
+  mockCacheSetRetrieval,
+  mockCacheInvalidateUser,
+  mockCacheGetEmbedding,
+  mockCacheSetEmbedding,
+} = vi.hoisted(() => ({
   mockPrisma: {
     $queryRawUnsafe: vi.fn(),
     $transaction: vi.fn(),
@@ -10,25 +18,38 @@ const { mockPrisma } = vi.hoisted(() => ({
       deleteMany: vi.fn(),
     },
   },
+  mockHybridRetrieve: vi.fn(),
+  mockCacheGetRetrieval: vi.fn<() => Promise<string[] | null>>().mockResolvedValue(null),
+  mockCacheSetRetrieval: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  mockCacheInvalidateUser: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  mockCacheGetEmbedding: vi.fn<() => Promise<number[] | null>>().mockResolvedValue(null),
+  mockCacheSetEmbedding: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../config/env.js", () => ({
-  env: {
-    OPENAI_API_KEY: "",
-  },
+  env: { OPENAI_API_KEY: "" },
 }));
 
 vi.mock("../../config/logger.js", () => ({
-  logger: {
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
+  logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock("../../infra/database/prisma.js", () => ({
   prisma: mockPrisma,
+}));
+
+vi.mock("./hybrid-search.service.js", () => ({
+  hybridSearchService: { retrieve: mockHybridRetrieve },
+}));
+
+vi.mock("./rag-cache.service.js", () => ({
+  ragCacheService: {
+    getRetrieval: mockCacheGetRetrieval,
+    setRetrieval: mockCacheSetRetrieval,
+    invalidateUser: mockCacheInvalidateUser,
+    getEmbedding: mockCacheGetEmbedding,
+    setEmbedding: mockCacheSetEmbedding,
+  },
 }));
 
 import { RagService } from "./rag.service";
@@ -36,52 +57,54 @@ import { RagService } from "./rag.service";
 describe("RagService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCacheGetRetrieval.mockResolvedValue(null);
+    mockCacheSetRetrieval.mockResolvedValue(undefined);
+    mockCacheInvalidateUser.mockResolvedValue(undefined);
+    mockCacheGetEmbedding.mockResolvedValue(null);
+    mockCacheSetEmbedding.mockResolvedValue(undefined);
     mockPrisma.$queryRawUnsafe.mockReset();
     mockPrisma.$transaction.mockReset();
     mockPrisma.knowledgeDocument.findMany.mockReset();
     mockPrisma.knowledgeDocument.deleteMany.mockReset();
   });
 
-  it("retrieves top-k contexts for a user and passes tenant filter in SQL args", async () => {
-    mockPrisma.$queryRawUnsafe.mockResolvedValue([
-      { chunk_text: "Doc 1 context" },
-      { chunk_text: "Doc 2 context" },
-    ]);
+  it("retrieves top-k contexts for a user via hybrid search", async () => {
+    mockHybridRetrieve.mockResolvedValue(["Doc 1 context", "Doc 2 context"]);
 
     const service = new RagService();
     const contexts = await service.retrieveContext("user-a", "How do refunds work?", 2);
 
     expect(contexts).toEqual(["Doc 1 context", "Doc 2 context"]);
-    expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledTimes(1);
-    const [sql, userIdArg, vectorArg, topKArg] = mockPrisma.$queryRawUnsafe.mock.calls[0] as [
-      string,
-      string,
-      string,
-      number,
-    ];
-    expect(sql).toContain('WHERE kd."userId" = $1');
-    expect(userIdArg).toBe("user-a");
-    expect(typeof vectorArg).toBe("string");
-    expect(vectorArg.startsWith("[")).toBe(true);
-    expect(topKArg).toBe(2);
+    expect(mockHybridRetrieve).toHaveBeenCalledTimes(1);
+    const [userId, query, , topK] = mockHybridRetrieve.mock.calls[0] as [string, string, number[], number];
+    expect(userId).toBe("user-a");
+    expect(query).toBe("How do refunds work?");
+    expect(topK).toBe(2);
   });
 
-  it("uses retrieval cache for same user, normalized query, and top-k", async () => {
-    mockPrisma.$queryRawUnsafe.mockResolvedValue([{ chunk_text: "Cached context" }]);
+  it("returns Redis-cached result without calling hybrid search", async () => {
+    mockCacheGetRetrieval.mockResolvedValue(["Cached context"]);
 
     const service = new RagService();
-    const first = await service.retrieveContext("user-cache", "   Billing Limits   ", 3);
-    const second = await service.retrieveContext("user-cache", "billing limits", 3);
+    const result = await service.retrieveContext("user-cache", "billing limits", 3);
 
-    expect(first).toEqual(["Cached context"]);
-    expect(second).toEqual(["Cached context"]);
-    expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(["Cached context"]);
+    expect(mockHybridRetrieve).not.toHaveBeenCalled();
+  });
+
+  it("populates Redis cache after a hybrid search miss", async () => {
+    mockHybridRetrieve.mockResolvedValue(["Fresh result"]);
+
+    const service = new RagService();
+    await service.retrieveContext("user-b", "refund policy", 3);
+
+    expect(mockCacheSetRetrieval).toHaveBeenCalledWith("user-b", "refund policy", 3, ["Fresh result"]);
   });
 
   it("does not share retrieval cache across tenants", async () => {
-    mockPrisma.$queryRawUnsafe
-      .mockResolvedValueOnce([{ chunk_text: "Tenant A" }])
-      .mockResolvedValueOnce([{ chunk_text: "Tenant B" }]);
+    mockHybridRetrieve
+      .mockResolvedValueOnce(["Tenant A"])
+      .mockResolvedValueOnce(["Tenant B"]);
 
     const service = new RagService();
     const a = await service.retrieveContext("tenant-a", "same question", 2);
@@ -89,7 +112,7 @@ describe("RagService", () => {
 
     expect(a).toEqual(["Tenant A"]);
     expect(b).toEqual(["Tenant B"]);
-    expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+    expect(mockHybridRetrieve).toHaveBeenCalledTimes(2);
   });
 
   it("builds prompt with explicit no-context fallback", () => {
@@ -97,14 +120,15 @@ describe("RagService", () => {
     const prompt = service.buildPrompt("What is VoxFlow?", []);
 
     expect(prompt).toContain("Context:\nNo relevant context found.");
-    expect(prompt).toContain("User:\nWhat is VoxFlow?");
+    expect(prompt).toContain("User: What is VoxFlow?");
   });
 
-  it("builds prompt by concatenating retrieved context chunks", () => {
+  it("builds prompt by numbering and concatenating retrieved context chunks", () => {
     const service = new RagService();
     const prompt = service.buildPrompt("Summarize", ["Fact A", "Fact B"]);
 
-    expect(prompt).toContain("Context:\nFact A\n\nFact B");
+    expect(prompt).toContain("Context:\n[1] Fact A\n\n[2] Fact B");
+    expect(prompt).toContain("User: Summarize");
   });
 
   it("rejects empty base64 uploads", async () => {
@@ -178,10 +202,10 @@ describe("RagService", () => {
     );
   });
 
-  it("invalidates retrieval cache for user after successful document deletion", async () => {
-    mockPrisma.$queryRawUnsafe
-      .mockResolvedValueOnce([{ chunk_text: "Before delete" }])
-      .mockResolvedValueOnce([{ chunk_text: "After delete" }]);
+  it("invalidates Redis retrieval cache for user after successful document deletion", async () => {
+    mockHybridRetrieve
+      .mockResolvedValueOnce(["Before delete"])
+      .mockResolvedValueOnce(["After delete"]);
     mockPrisma.knowledgeDocument.deleteMany.mockResolvedValue({ count: 1 });
 
     const service = new RagService();
@@ -191,7 +215,8 @@ describe("RagService", () => {
 
     expect(beforeDelete).toEqual(["Before delete"]);
     expect(afterDelete).toEqual(["After delete"]);
-    expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+    expect(mockCacheInvalidateUser).toHaveBeenCalledWith("user-delete");
+    expect(mockHybridRetrieve).toHaveBeenCalledTimes(2);
   });
 
   it("throws DOCUMENT_NOT_FOUND when deleteDocument cannot delete tenant-owned document", async () => {

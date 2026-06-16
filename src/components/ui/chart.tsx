@@ -68,6 +68,8 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 
   return (
     <style
+      // nosemgrep: react-dangerouslysetinnerhtml — CSS custom properties generated from
+      // a static theme config object, no user-controlled input reaches __html.
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(

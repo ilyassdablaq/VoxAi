@@ -17,8 +17,11 @@ import { prisma } from "../../infra/database/prisma.js";
 import { logger } from "../../config/logger.js";
 
 const RRF_K = 60;
-const DEFAULT_TOP_K = 4;
+const DEFAULT_TOP_K = 6;
 const DEFAULT_CANDIDATE_MULTIPLIER = 3; // fetch 3× topK from each method before fusion
+// Cosine distance threshold (pgvector `<=>`, 0..2). Chunks above this are
+// off-topic and excluded before RRF fusion so they don't skew rankings.
+const DEFAULT_MAX_COSINE_DISTANCE = 0.65;
 
 type RawVectorRow = { id: string; chunk_text: string };
 type RawFtsRow = { id: string; chunk_text: string };
@@ -68,13 +71,14 @@ export class HybridSearchService {
     query: string,
     embedding: number[],
     topK = DEFAULT_TOP_K,
+    maxCosineDistance = DEFAULT_MAX_COSINE_DISTANCE,
   ): Promise<string[]> {
     const candidates = topK * DEFAULT_CANDIDATE_MULTIPLIER;
     const embeddingSql = toVectorSql(embedding);
     const safeQuery = sanitizeFtsQuery(query);
 
     const [vectorRows, ftsRows] = await Promise.all([
-      this.vectorSearch(userId, embeddingSql, candidates),
+      this.vectorSearch(userId, embeddingSql, candidates, maxCosineDistance),
       this.ftsSearch(userId, safeQuery, candidates),
     ]);
 
@@ -100,17 +104,20 @@ export class HybridSearchService {
     return fused.map((item) => chunkTextById.get(item.id) ?? "");
   }
 
-  private async vectorSearch(userId: string, embeddingSql: string, limit: number): Promise<RawVectorRow[]> {
+  private async vectorSearch(userId: string, embeddingSql: string, limit: number, maxCosineDistance: number): Promise<RawVectorRow[]> {
+    // Use cosine distance (`<=>`) — correct metric for OpenAI unit-normalized embeddings.
     return prisma.$queryRawUnsafe<RawVectorRow[]>(
       `SELECT kc.id, kc."chunkText" AS chunk_text
        FROM "KnowledgeChunk" kc
        INNER JOIN "KnowledgeDocument" kd ON kd.id = kc."documentId"
        WHERE kd."userId" = $1
-       ORDER BY kc.embedding <-> $2::vector
+         AND (kc.embedding <=> $2::vector) <= $4
+       ORDER BY kc.embedding <=> $2::vector
        LIMIT $3`,
       userId,
       embeddingSql,
       limit,
+      maxCosineDistance,
     );
   }
 

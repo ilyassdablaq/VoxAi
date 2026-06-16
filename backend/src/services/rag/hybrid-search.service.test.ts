@@ -38,7 +38,7 @@ describe("HybridSearchService", () => {
     expect(mockQueryRawUnsafe).toHaveBeenCalledTimes(2);
     const [sql1] = mockQueryRawUnsafe.mock.calls[0] as [string];
     const [sql2] = mockQueryRawUnsafe.mock.calls[1] as [string];
-    expect(sql1).toContain("<->");         // vector distance operator
+    expect(sql1).toContain("<=>");         // cosine distance operator
     expect(sql2).toContain("plainto_tsquery"); // FTS operator
   });
 

@@ -97,6 +97,29 @@ export async function renderPageHtml(url: string, userAgent: string): Promise<st
       await page
         .waitForLoadState("networkidle", { timeout: RENDER_NETWORKIDLE_TIMEOUT_MS })
         .catch(() => undefined);
+
+      // Scroll through the entire page so IntersectionObserver-based lazy loading
+      // (scroll-triggered DOM insertions, not just CSS animations) fires before we
+      // capture the DOM. Each step scrolls one viewport height and waits briefly
+      // for triggered network requests to start; the final networkidle wait catches
+      // any resulting fetches.
+      await page.evaluate(async () => {
+        await new Promise<void>((resolve) => {
+          const step = () => {
+            window.scrollBy(0, window.innerHeight);
+            if (window.scrollY + window.innerHeight < document.body.scrollHeight) {
+              setTimeout(step, 120);
+            } else {
+              resolve();
+            }
+          };
+          step();
+        });
+      });
+      await page
+        .waitForLoadState("networkidle", { timeout: 4_000 })
+        .catch(() => undefined);
+
       await page.waitForTimeout(RENDER_SETTLE_MS);
       return await page.content();
     } finally {
